@@ -41,7 +41,7 @@ pub enum Action {
 // starting from the trie root node
 // (While Rust supports recursion but not tail recursion this explicit stack somewhat likens
 // to a call stack with no limitations of potentially blowing the call stack)
-pub fn capture<K>(current: &Node<K>, prefix: &[u8]) -> Option<DeletePlan> {
+pub fn capture<K, V>(current: &Node<K, V>, prefix: &[u8]) -> Option<DeletePlan> {
     let mut replay: Vec<Playback> = Vec::new();
     let mut status: HashSet<Status> = HashSet::new();
     let mut action: Action = Action::Noop;
@@ -52,7 +52,7 @@ pub fn capture<K>(current: &Node<K>, prefix: &[u8]) -> Option<DeletePlan> {
     // Take the dfs stack (with the terminal node on top)
     // and convert it into a replay stack
 
-    let result: TraverseResult<K> =  traverse(current, prefix, TraverseType::Fold)?;
+    let result: TraverseResult<K, V> =  traverse(current, prefix, TraverseType::Fold)?;
     let mut stack = enum_extract!(result, TraverseResult::Stack);
 
     //prepopulated stack given prefix and trie

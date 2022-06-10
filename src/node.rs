@@ -15,15 +15,15 @@ use crate::traverse::{TraverseType, TraverseResult, KeyMatch, SuffixType, traver
 // simulate that we store a K with the zero-sized unused field key as a PhantomData type
 // To prevent the unused K from affecting the drop check anaylsis it is wrapped in an fn() (just like Empty Iterator)
 
-pub struct Node<K> {
+pub struct Node<K, V> {
     label: Option<Vec<u8>>,
-    value: Option<i32>,
+    value: Option<Box<V>>,
     tag: NodeType,
-    edges: HashMap<u8, Box<Node<K>>>,
+    edges: HashMap<u8, Box<Node<K, V>>>,
     key: PhantomData<fn() -> K>,  // from Empty Iterator
 }
 
-impl<K> Default for Node<K> {
+impl<K, V> Default for Node<K, V> {
     fn default() -> Self {
         Node {
             label: None,
@@ -51,12 +51,12 @@ pub enum EdgeType {
     Branching(usize),  // 2 or more
 }
 
-pub type NodeEdgesValueIter<'a, K> = std::collections::hash_map::Values<'a, u8, Box<Node<K>>>;
-pub type NodeEdgesKeyIter<'a, K> = std::collections::hash_map::Keys<'a, u8, Box<Node<K>>>;
+pub type NodeEdgesValueIter<'a, K, V> = std::collections::hash_map::Values<'a, u8, Box<Node<K, V>>>;
+pub type NodeEdgesKeyIter<'a, K, V> = std::collections::hash_map::Keys<'a, u8, Box<Node<K, V>>>;
 
 
-impl<K> Node<K> {
-    pub fn new(label: Option<Vec<u8>>, tag: NodeType, value: Option<i32>) -> Self {
+impl<K, V> Node<K, V> {
+    pub fn new(label: Option<Vec<u8>>, tag: NodeType, value: Option<Box<V>>) -> Self {
         Node {
             label,
             value,
@@ -82,29 +82,29 @@ impl<K> Node<K> {
         }
     }
 
-    pub(crate) fn edges_keys_iter(&self) -> NodeEdgesKeyIter<'_, K> {
+    pub(crate) fn edges_keys_iter(&self) -> NodeEdgesKeyIter<'_, K, V> {
         self.edges.keys()
     }
 
-    pub(crate) fn edges_values_iter(&self) -> NodeEdgesValueIter<'_, K> {
+    pub(crate) fn edges_values_iter(&self) -> NodeEdgesValueIter<'_, K, V> {
         self.edges.values()
     }
 
-    pub(crate) fn lookup_edge(&self, first: u8) -> Option<&Box<Node<K>>> {
+    pub(crate) fn lookup_edge(&self, first: u8) -> Option<&Box<Node<K, V>>> {
         self.edges.get(&first)
     }
 
-    pub(crate) fn lookup_edge_mut(&mut self, first: u8) -> Option<&mut Box<Node<K>>> {
+    pub(crate) fn lookup_edge_mut(&mut self, first: u8) -> Option<&mut Box<Node<K, V>>> {
         self.edges.get_mut(&first)
     }
 
-    pub fn search(&self, prefix: &[u8]) -> Option<&'_ i32> 
+    pub fn search(&self, prefix: &[u8]) -> Option<&'_ V> 
     {
-        let current: &Node<K> = self;
-        let result: TraverseResult<K> = traverse(current, prefix, TraverseType::Search)?;
+        let current: &Node<K, V> = self;
+        let result: TraverseResult<K, V> = traverse(current, prefix, TraverseType::Search)?;
 
         match result {
-            TraverseResult::Terminal(true, n) => n.value.as_ref(),
+            TraverseResult::Terminal(true, n) => n.value.as_deref(),
             _ => None,
         }
     }
@@ -114,7 +114,7 @@ impl<K> Node<K> {
     // If value not already present, insert it creating new intermediate
     // nodes as necessary
 
-    fn insert_bridge(&mut self, byte_key: u8, common: Vec<u8>, suffix_edge: Vec<u8>) -> &mut Box<Node<K>> {
+    fn insert_bridge(&mut self, byte_key: u8, common: Vec<u8>, suffix_edge: Vec<u8>) -> &mut Box<Node<K, V>> {
         if common.is_empty() || suffix_edge.is_empty() {
             unreachable!();
         }
@@ -133,14 +133,14 @@ impl<K> Node<K> {
         self.edges.get_mut(&byte_key).unwrap()
     }
 
-    fn next_helper(&mut self, key: u8) -> Option<& '_ mut Node<K>>{
+    fn next_helper(&mut self, key: u8) -> Option<& '_ mut Node<K, V>>{
         self.lookup_edge_mut(key).map(|box_ref| &mut **box_ref)
     }
 
-    pub fn insert(&mut self, prefix: &[u8], value: Option<i32>) -> Option<i32>
+    pub fn insert(&mut self, prefix: &[u8], value: V) -> Option<V>
     {
-        let mut current: &mut Node<K> = self;
-        let mut temp_box: &mut Box<Node<K>>;
+        let mut current: &mut Node<K, V> = self;
+        let mut temp_box: &mut Box<Node<K, V>>;
 
         if prefix.is_empty() {
             return None
@@ -195,29 +195,32 @@ impl<K> Node<K> {
         // As we have finished iterating through, the prefix mark the node properly
         // if a node is marked already as a Key Node, (indicating it was previously
         // inserted), grab old value out and replace with new boxed node)
+
+        let boxed_value = Box::new(value);
+
         match current.tag {
             NodeType::Inner => {
                 current.tag = NodeType::Key;
-                current.value = value;
-                None
+                current.value.replace(boxed_value);
+                None // not returning anything since this is a new key node
             },
             NodeType::Key => {
-                let new_node = Node::new(current.label.take(), NodeType::Key, value);
-                let old_node = mem::replace(current, new_node);
+                let new_node = Node::new(current.label.take(), NodeType::Key, Some(boxed_value));
+                let mut old_node = mem::replace(current, new_node);
                 let _old = mem::replace(&mut current.edges, old_node.edges);
-                old_node.value
+                old_node.value.take().map(|bx| *bx) // return Some without Box wrapper around V
             }
         }
     }
 
-    pub fn remove(&mut self, prefix: &[u8]) -> Option<i32>
+    pub fn remove(&mut self, prefix: &[u8]) -> Option<V>
     {
-        let mut current: &mut Node<K> = self;
+        let mut current: &mut Node<K, V> = self;
         let mut item: Playback;
         let mut counter: u32 = 0;
-        let mut temp: &mut Box<Node<K>>;
-        let mut temp_box: Box<Node<K>>;
-        let mut value: Option<i32> = None;
+        let mut temp: &mut Box<Node<K, V>>;
+        let mut temp_box: Box<Node<K, V>>;
+        let mut value: Option<V> = None;
 
         //println!("xx1");
 
@@ -248,7 +251,7 @@ impl<K> Node<K> {
                 // unmark tag and grab value
                 Playback::Unmark(Cursor::Node(i)) if i == counter => {
                     current.tag = NodeType::Inner;
-                    value = current.value.take();
+                    value = current.value.take().map(|bx| *bx) // return Some without Box wrapper around V;
                 },
                 _ => {
                     unreachable!()
@@ -261,7 +264,7 @@ impl<K> Node<K> {
         value
     }
 
-    fn handle_passthrough(&mut self, edge_key: u8, merge_key: u8) -> Box<Node<K>> {
+    fn handle_passthrough(&mut self, edge_key: u8, merge_key: u8) -> Box<Node<K, V>> {
         let current = self;
 
         /*
@@ -325,15 +328,15 @@ impl<K> Node<K> {
     }
 }
 
-impl<K> Node<K> {
-    pub(crate) fn iter(&self) -> LabelsIter<'_, K> {
+impl<K, V> Node<K, V> {
+    pub(crate) fn iter(&self) -> LabelsIter<'_, K, V> {
         LabelsIter::new(self)
     }
 }
 
-impl <'a, K> IntoIterator for &'a Node<K> {
+impl <'a, K, V> IntoIterator for &'a Node<K, V> {
     type Item = &'a [u8];
-    type IntoIter = LabelsIter<'a, K>;
+    type IntoIter = LabelsIter<'a, K, V>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()

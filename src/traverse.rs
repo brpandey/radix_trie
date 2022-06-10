@@ -1,6 +1,6 @@
 use crate::node::Node;
 
-pub(crate) type TraverseStack<'a, K> = Vec<TraverseItem<'a, K>>;
+pub(crate) type TraverseStack<'a, K, V> = Vec<TraverseItem<'a, K, V>>;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum TraverseType {
@@ -10,8 +10,8 @@ pub(crate) enum TraverseType {
 }
 
 #[derive(Debug)]
-pub(crate) struct KeyMatch<'a, 'b, K: 'a> {
-    pub(crate) next: &'a Node<K>,
+pub(crate) struct KeyMatch<'a, 'b, K: 'a, V: 'a> {
+    pub(crate) next: &'a Node<K, V>,
     pub(crate) common: &'a [u8],
     pub(crate) leftover: SuffixType<'a, 'b>,
     pub(crate) edge_key: u8,
@@ -26,22 +26,22 @@ pub(crate) enum SuffixType<'a, 'b> {
 }
 
 #[derive(Debug)]
-pub(crate) struct TraverseItem<'a, K: 'a>{
-    pub(crate) node: &'a Node<K>,
+pub(crate) struct TraverseItem<'a, K: 'a, V: 'a>{
+    pub(crate) node: &'a Node<K, V>,
     pub(crate) next_key: u8,
     pub(crate) label: Option<&'a [u8]>,
     pub(crate) level: u32,
 }
 
 #[derive(Debug)]
-pub(crate) enum TraverseResult<'a, K: 'a> {
-    Stack(Vec<TraverseItem<'a, K>>),
-    PartialTerminal(bool, &'a Node<K>, &'a [u8]), // If match prefix matches some of the terminal's label
-    Terminal(bool, &'a Node<K>),
+pub(crate) enum TraverseResult<'a, K: 'a, V: 'a> {
+    Stack(Vec<TraverseItem<'a, K, V>>),
+    PartialTerminal(bool, &'a Node<K, V>, &'a [u8]), // If match prefix matches some of the terminal's label
+    Terminal(bool, &'a Node<K, V>),
 }
 
-impl<'a, 'b, K: 'a> KeyMatch<'a, 'b, K> {
-    pub fn new(next: &'a Node<K>, common: &'a [u8], leftover: SuffixType<'a, 'b>, edge_key: u8) -> Self {
+impl<'a, 'b, K: 'a, V: 'a> KeyMatch<'a, 'b, K, V> {
+    pub fn new(next: &'a Node<K, V>, common: &'a [u8], leftover: SuffixType<'a, 'b>, edge_key: u8) -> Self {
         KeyMatch {
             next,
             common,
@@ -64,9 +64,9 @@ impl<'a, 'b> SuffixType<'a, 'b> {
 }
 
 
-pub(crate) fn traverse_match<'a, 'b, K>(node: &'a Node<K>, token: &'b [u8]) -> Option<KeyMatch<'a, 'b, K>> {
+pub(crate) fn traverse_match<'a, 'b, K, V>(node: &'a Node<K, V>, token: &'b [u8]) -> Option<KeyMatch<'a, 'b, K, V>> {
     let mut index = 0;
-    let next_node: &Node<K>;
+    let next_node: &Node<K, V>;
     let edge_key = token[0];
 
     if let Some(box_ref) = node.lookup_edge(edge_key) {
@@ -102,9 +102,9 @@ pub(crate) fn traverse_match<'a, 'b, K>(node: &'a Node<K>, token: &'b [u8]) -> O
 }
 
 
-pub(crate) fn traverse<'a, 'b, K>(node: &'a Node<K>, token: &'b [u8], traverse_type: TraverseType) -> Option<TraverseResult<'a, K>> {
-    let mut stack: TraverseStack<K> = Vec::new();
-    let mut current: &Node<K> = node;
+pub(crate) fn traverse<'a, 'b, K, V>(node: &'a Node<K, V>, token: &'b [u8], traverse_type: TraverseType) -> Option<TraverseResult<'a, K, V>> {
+    let mut stack: TraverseStack<K, V> = Vec::new();
+    let mut current: &Node<K, V> = node;
     let mut level: u32 = 0;
     let mut partial_terminal = None;
 
@@ -177,8 +177,8 @@ pub(crate) fn traverse<'a, 'b, K>(node: &'a Node<K>, token: &'b [u8], traverse_t
     Some(value)
 }
 
-fn traverse_fold_helper<'a, 's, K>(node: &'a Node<K>, level: u32,
-                                    stack: &'s mut TraverseStack<'a, K>, traverse_type: TraverseType) {
+fn traverse_fold_helper<'a, 's, K, V>(node: &'a Node<K, V>, level: u32,
+                                    stack: &'s mut TraverseStack<'a, K, V>, traverse_type: TraverseType) {
     match traverse_type {
         TraverseType::Fold | TraverseType::FoldOrPartial => {
             if let Some(common) = node.label() {
