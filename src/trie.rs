@@ -1,28 +1,36 @@
+//use std::borrow::Borrow;
+use std::convert::AsRef;
 use crate::node::Node;
 use crate::query::{longest_prefix, all_keys};
 use crate::iter::LabelsIter;
 
 #[derive(Debug)]
-pub struct Trie {
+pub struct Trie<K> {
     size: usize,
-    root: Option<Node>,
+    root: Option<Node<K>>,
 }
 
-impl Trie {
+impl<K> Trie<K>
+{
     pub fn new() -> Self {
         Trie { size: 0, root: None }
     }
 
-    pub fn search(&self, token: &str) -> Option<&'_ i32> {
-        self.root.as_ref().and_then(|n| n.search(token))
+    pub fn search(&self, token: K) -> Option<&'_ i32>
+    where K: AsRef<[u8]>
+    {
+        self.root.as_ref().and_then(|n| n.search(token.as_ref()))
     }
 
-    pub fn insert(&mut self, token: &str, value: i32) -> Option<i32> {
+    pub fn insert(&mut self, token: K, value: i32) -> Option<i32>
+    where K: AsRef<[u8]>
+//      where I: <ToOwned<Owned=Vec<u8>>
+    {
         if self.root.is_none() {
             self.root = Some(Node::default());
         }
 
-        let result = self.root.as_mut().and_then(|n| n.insert(token, Some(value)));
+        let result = self.root.as_mut().and_then(|n| n.insert(token.as_ref(), Some(value)));
 
         if result.is_none() {
             self.size += 1
@@ -31,12 +39,16 @@ impl Trie {
         result
     }
 
-    pub fn longest_prefix(&self, token: &str) -> Option<impl Iterator<Item = &'_ u8>> { //Option<String> {
-        self.root.as_ref().and_then(|n| longest_prefix(n, token))
+    pub fn longest_prefix(&self, token: K) -> Option<impl Iterator<Item = &'_ u8>>
+    where K: AsRef<[u8]>
+    { //Option<String> {
+        self.root.as_ref().and_then(|n| longest_prefix(n, token.as_ref()))
     }
 
-    pub fn all_keys(&self, token: &str) -> Option<Vec<Vec<u8>>> {
-        self.root.as_ref().and_then(|n| all_keys(n, token))
+    pub fn all_keys(&self, token: K) -> Option<Vec<Vec<u8>>>
+    where K: AsRef<[u8]>
+    {
+        self.root.as_ref().and_then(|n| all_keys(n, token.as_ref()))
     }
 
     pub fn is_empty(&self) -> bool {
@@ -48,8 +60,10 @@ impl Trie {
         self.size = 0
     }
 
-    pub fn remove(&mut self, token: &str) -> Option<i32> {
-        let result = self.root.as_mut().and_then(|n| n.remove(token));
+    pub fn remove(&mut self, token: K) -> Option<i32>
+    where K: AsRef<[u8]>
+    {
+        let result = self.root.as_mut().and_then(|n| n.remove(token.as_ref()));
 
         if result.is_some() {
             self.size -= 1
@@ -60,21 +74,23 @@ impl Trie {
 }
 
 
-impl Default for Trie {
-    fn default() -> Self {
-        Self::new()
+impl<K> Default for Trie<K>
+{
+    fn default() -> Trie<K> {
+        Trie::new()
     }
 }
 
 
 // top level iterator for Trie
-pub struct Labels<'a> {
-    inner: LabelsIter<'a>,
+pub struct Labels<'a, K> {
+    inner: LabelsIter<'a, K>,
     size: usize,
 }
 
-impl Trie {
-    pub fn iter(&self) -> Labels<'_> {
+
+impl<K> Trie<K> {
+    pub fn iter(&self) -> Labels<'_, K> {
         Labels {
             inner: self.root.as_ref().map_or_else(
                 || LabelsIter::default(), |r| r.iter()
@@ -85,7 +101,7 @@ impl Trie {
 }
 
 
-impl<'a> Iterator for Labels<'a> {
+impl<'a, K: 'a> Iterator for Labels<'a, K> {
     type Item = &'a [u8];
 
     #[inline]
@@ -101,10 +117,12 @@ impl<'a> Iterator for Labels<'a> {
 }
 
 
-impl FromIterator<(&'static str, i32)> for Trie {
-    fn from_iter<I>(iter: I) -> Trie
+impl<K> FromIterator<(K, i32)> for Trie<K>
+where K: AsRef<[u8]>
+{
+    fn from_iter<I>(iter: I) -> Trie<K>
     where
-        I: IntoIterator<Item = (&'static str, i32)>,
+        I: IntoIterator<Item = (K, i32)>,
     {
         let mut trie = Trie::new();
 
@@ -133,7 +151,7 @@ mod tests {
         }
     }
 
-    fn labels_helper<'a>(labels: Labels<'a>) -> BTreeSet<&'a str> {
+    fn labels_helper<'a, K: 'a>(labels: Labels<'a, K>) -> BTreeSet<&'a str> {
         labels.map(|bytes| std::str::from_utf8(bytes).unwrap()).collect::<BTreeSet<&str>>()
     }
 
@@ -145,32 +163,32 @@ mod tests {
 
     #[test]
     fn search_basic() {
-        let t: Trie = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
-        assert_eq!(&1, t.search("anthem").unwrap());
-        assert_eq!(None, t.search("ant"))
+        let trie: Trie<_> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
+        assert_eq!(&1, trie.search("anthem").unwrap());
+        assert_eq!(None, trie.search("ant"))
     }
 
     #[test]
     fn search_with_remove() {
-        let mut t: Trie = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
-        assert_eq!(&2, t.search("anti").unwrap());
-        assert_eq!(Some(2), t.remove("anti"));
-        assert_eq!(None, t.search("anti"));
+        let mut trie: Trie<_> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
+        assert_eq!(&2, trie.search("anti").unwrap());
+        assert_eq!(Some(2), trie.remove("anti"));
+        assert_eq!(None, trie.search("anti"));
     }
 
     #[test]
     fn search_with_replace_insert() {
-        let mut t: Trie = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
-        assert_eq!(&1, t.search("anthem").unwrap());
-        assert_eq!(Some(1), t.insert("anthem", 98));
-        assert_eq!(&98, t.search("anthem").unwrap());
+        let mut trie: Trie<_> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
+        assert_eq!(&1, trie.search("anthem").unwrap());
+        assert_eq!(Some(1), trie.insert("anthem", 98));
+        assert_eq!(&98, trie.search("anthem").unwrap());
     }
 
     #[test]
     fn check_all_keys() {
-        let t: Trie = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
+        let trie: Trie<_> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
 
-        let mut keys = t.all_keys("ant").unwrap();
+        let mut keys = trie.all_keys("ant").unwrap();
         keys.sort();
 
         let nested = vec![
@@ -191,9 +209,9 @@ mod tests {
 
     #[test]
     fn check_longest_prefix() {
-        let t: Trie = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
+        let trie: Trie<_> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
 
-        let result = t.longest_prefix("anthemio").unwrap().cloned().collect::<Vec<_>>();
+        let result = trie.longest_prefix("anthemio").unwrap().cloned().collect::<Vec<_>>();
 
         assert_eq!("anthem", std::str::from_utf8(&result).unwrap());
     }
@@ -202,23 +220,23 @@ mod tests {
 
     #[test]
     fn passthru_removes() {
-        let mut t: Trie = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
+        let mut trie: Trie<_> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
 
-        let keys = t.all_keys("an");
+        let keys = trie.all_keys("an");
         let result = keys_helper(keys.as_ref());
 
         assert_eq!(vec!["and", "anthem", "anthemion", "anti"], result);
 
 
         // remove passthru that is followed by a pruned edge
-        assert_eq!(2, t.remove("anti").unwrap());
-        assert_eq!(None, t.search("anti"));
-        assert_eq!(&1, t.search("anthem").unwrap());
+        assert_eq!(2, trie.remove("anti").unwrap());
+        assert_eq!(None, trie.search("anti"));
+        assert_eq!(&1, trie.search("anthem").unwrap());
 
         // remove passthrough that has a child
-        assert_eq!(1, t.remove("anthem").unwrap());
+        assert_eq!(1, trie.remove("anthem").unwrap());
 
-        let keys = t.all_keys("an");
+        let keys = trie.all_keys("an");
         let result = keys_helper(keys.as_ref());
 
         assert_eq!(vec!["and", "anthemion"], result);
@@ -227,22 +245,22 @@ mod tests {
 
     #[test]
     fn delete_all() {
-        let mut t: Trie = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
+        let mut trie: Trie<_> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
 
-        let keys = t.all_keys("an");
+        let keys = trie.all_keys("an");
         let result = keys_helper(keys.as_ref());
 
         assert_eq!(vec!["and", "anthem", "anthemion", "anti"], result);
 
-//        print_labels(t.iter());
+//        print_labels(trie.iter());
 
         // skip the first &str "and" then delete it after the loop 
         for (i, k) in result.iter().skip(1).enumerate() {
-            t.remove(k);
+            trie.remove(k);
 
-//            print_labels(t.iter());
+//            print_labels(trie.iter());
 
-            let keys = t.all_keys("an");
+            let keys = trie.all_keys("an");
             let v: Vec<&str> = keys_helper(keys.as_ref());
 
             match i {
@@ -252,24 +270,24 @@ mod tests {
                 _ => (),
             }
 
-            assert_eq!(t.remove("nonexistent1"), None);
+            assert_eq!(trie.remove("nonexistent1"), None);
         }
 
-        assert_eq!(t.remove("and").unwrap(), 77);
-        assert_eq!(t.all_keys("an"), None);
+        assert_eq!(trie.remove("and").unwrap(), 77);
+        assert_eq!(trie.all_keys("an"), None);
 
 
-        assert_eq!(t.remove("nonexistent2"), None);
+        assert_eq!(trie.remove("nonexistent2"), None);
 
-        assert_eq!(t.is_empty(), true);
+        assert_eq!(trie.is_empty(), true);
     }
 
 
     #[test]
     fn check_compessed_labels() {
-        let mut t: Trie = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
+        let mut trie: Trie<_> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
 
-        let keys = t.all_keys("an");
+        let keys = trie.all_keys("an");
         let keys_vec = keys_helper(keys.as_ref());
 
         assert_eq!(vec!["and", "anthem", "anthemion", "anti"], keys_vec);
@@ -277,7 +295,7 @@ mod tests {
         // skip the first &str "and" then delete it after the loop 
         for (i, k) in keys_vec.iter().enumerate() {
 
-            let set = labels_helper(t.iter());
+            let set = labels_helper(trie.iter());
 
             // Through each delete iteration, check the labels of the trees
             // Since the deletion causes labels to be compressed/deleted expect number of labels to reduce
@@ -289,7 +307,7 @@ mod tests {
                 _ => (),
             }
 
-            t.remove(k);
+            trie.remove(k);
         }
     }
     

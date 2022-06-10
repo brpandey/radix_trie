@@ -4,9 +4,9 @@ use crate::node::{Node};
 use crate::traverse::{TraverseItem, TraverseType, TraverseResult, traverse};
 use crate::macros::enum_extract;
 
-pub fn longest_prefix<'a>(node: &'a Node, prefix: &str) -> Option<impl Iterator<Item = &'a u8>> {
+pub fn longest_prefix<'a, 'b, K>(node: &'a Node<K>, prefix: &'b [u8]) -> Option<impl Iterator<Item = &'a u8>> {
                                                            // Option<String> {
-    let value: TraverseResult =  traverse(node, prefix.as_bytes(), TraverseType::FoldOrPartial)?;
+    let value: TraverseResult<K> =  traverse(node, prefix, TraverseType::FoldOrPartial)?;
     let mut stack = enum_extract!(value, TraverseResult::Stack);
 
     // store label iterators
@@ -54,9 +54,9 @@ pub fn longest_prefix<'a>(node: &'a Node, prefix: &str) -> Option<impl Iterator<
 }
 
 // Find all prefix keys which have the common prefix
-pub fn all_keys<'a, 'b>(node: &'a Node, prefix: &'b str) -> Option<Vec<Vec<u8>>> {
+pub fn all_keys<'a, 'b, K>(node: &'a Node<K>, prefix: &'b [u8]) -> Option<Vec<Vec<u8>>> {
     // Grab node where the prefix search ends
-    let result: TraverseResult = traverse(node, prefix.as_bytes(), TraverseType::Search)?;
+    let result: TraverseResult<K> = traverse(node, prefix, TraverseType::Search)?;
 
     // If prefix is contained in the middle of a label e.g. partial terminal, that's fine
     // Just take that terminal node's label which is prefix + edge_suffix as the
@@ -74,15 +74,15 @@ pub fn all_keys<'a, 'b>(node: &'a Node, prefix: &'b str) -> Option<Vec<Vec<u8>>>
         };
 
     let mut result: Vec<Vec<u8>> = Vec::new();
-    let mut backlog: VecDeque<(&Node, Vec<u8>)> = VecDeque::new();
+    let mut backlog: VecDeque<(&Node<K>, Vec<u8>)> = VecDeque::new();
 
-    let mut child: &Node;
+    let mut child: &Node<K>;
     let mut child_bytes: Vec<u8>;
     let mut label_slice: &[u8];
 
     // Using BFS
 
-    let mut seed = prefix.as_bytes().to_vec();
+    let mut seed = prefix.to_vec();
 
     match leftover {
         None => backlog.push_back((current, seed)),

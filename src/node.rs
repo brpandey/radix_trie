@@ -1,5 +1,6 @@
 use std::mem;
-use std::str;
+use std::marker::PhantomData;
+
 use std::collections::{HashMap};
 
 use crate::iter::LabelsIter;
@@ -8,20 +9,28 @@ use crate::traverse::{TraverseType, TraverseResult, KeyMatch, SuffixType, traver
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 // #[derive(Debug)] - define custom Debug?
-pub struct Node {
+
+// Since generics and traits work hand in hand and we want to use the trait AsRef<[u8]>
+// for our Trie, since we don't actually store a key type K in the node but instead a Vec<u8>, we
+// simulate that we store a K with the zero-sized unused field key as a PhantomData type
+// To prevent the unused K from affecting the drop check anaylsis it is wrapped in an fn() (just like Empty Iterator)
+
+pub struct Node<K> {
     label: Option<Vec<u8>>,
     value: Option<i32>,
     tag: NodeType,
-    edges: HashMap<u8, Box<Node>>,
+    edges: HashMap<u8, Box<Node<K>>>,
+    key: PhantomData<fn() -> K>,  // from Empty Iterator
 }
 
-impl Default for Node {
+impl<K> Default for Node<K> {
     fn default() -> Self {
         Node {
             label: None,
             value: None,
             tag: NodeType::default(),
-            edges: HashMap::new()
+            edges: HashMap::new(),
+            key: PhantomData,
         }
     }
 }
@@ -42,16 +51,18 @@ pub enum EdgeType {
     Branching(usize),  // 2 or more
 }
 
-pub type NodeEdgesValueIter<'a> = std::collections::hash_map::Values<'a, u8, Box<Node>>;
-pub type NodeEdgesKeyIter<'a> = std::collections::hash_map::Keys<'a, u8, Box<Node>>;
+pub type NodeEdgesValueIter<'a, K> = std::collections::hash_map::Values<'a, u8, Box<Node<K>>>;
+pub type NodeEdgesKeyIter<'a, K> = std::collections::hash_map::Keys<'a, u8, Box<Node<K>>>;
 
-impl Node {
+
+impl<K> Node<K> {
     pub fn new(label: Option<Vec<u8>>, tag: NodeType, value: Option<i32>) -> Self {
         Node {
             label,
             value,
             tag,
             edges: HashMap::new(),
+            key: PhantomData,
         }
     }
 
@@ -71,25 +82,26 @@ impl Node {
         }
     }
 
-    pub(crate) fn edges_keys_iter(&self) -> NodeEdgesKeyIter<'_> {
+    pub(crate) fn edges_keys_iter(&self) -> NodeEdgesKeyIter<'_, K> {
         self.edges.keys()
     }
 
-    pub(crate) fn edges_values_iter(&self) -> NodeEdgesValueIter<'_> {
+    pub(crate) fn edges_values_iter(&self) -> NodeEdgesValueIter<'_, K> {
         self.edges.values()
     }
 
-    pub(crate) fn lookup_edge(&self, first: u8) -> Option<&Box<Node>> {
+    pub(crate) fn lookup_edge(&self, first: u8) -> Option<&Box<Node<K>>> {
         self.edges.get(&first)
     }
 
-    pub(crate) fn lookup_edge_mut(&mut self, first: u8) -> Option<&mut Box<Node>> {
+    pub(crate) fn lookup_edge_mut(&mut self, first: u8) -> Option<&mut Box<Node<K>>> {
         self.edges.get_mut(&first)
     }
 
-    pub fn search(&self, prefix: &str) -> Option<&'_ i32> {
-        let current: &Node = self;
-        let result: TraverseResult = traverse(current, prefix.as_bytes(), TraverseType::Search)?;
+    pub fn search(&self, prefix: &[u8]) -> Option<&'_ i32> 
+    {
+        let current: &Node<K> = self;
+        let result: TraverseResult<K> = traverse(current, prefix, TraverseType::Search)?;
 
         match result {
             TraverseResult::Terminal(true, n) => n.value.as_ref(),
@@ -102,7 +114,7 @@ impl Node {
     // If value not already present, insert it creating new intermediate
     // nodes as necessary
 
-    pub fn insert_bridge(&mut self, byte_key: u8, common: Vec<u8>, suffix_edge: Vec<u8>) -> &mut Box<Node> {
+    fn insert_bridge(&mut self, byte_key: u8, common: Vec<u8>, suffix_edge: Vec<u8>) -> &mut Box<Node<K>> {
         if common.is_empty() || suffix_edge.is_empty() {
             unreachable!();
         }
@@ -121,19 +133,20 @@ impl Node {
         self.edges.get_mut(&byte_key).unwrap()
     }
 
-    fn next_helper(&mut self, key: u8) -> Option<& '_ mut Node>{
+    fn next_helper(&mut self, key: u8) -> Option<& '_ mut Node<K>>{
         self.lookup_edge_mut(key).map(|box_ref| &mut **box_ref)
     }
 
-    pub fn insert(&mut self, prefix: &str, value: Option<i32>) -> Option<i32> {
-        let mut current: &mut Node = self;
-        let mut temp_box: &mut Box<Node>;
+    pub fn insert(&mut self, prefix: &[u8], value: Option<i32>) -> Option<i32>
+    {
+        let mut current: &mut Node<K> = self;
+        let mut temp_box: &mut Box<Node<K>>;
 
         if prefix.is_empty() {
             return None
         }
 
-        let mut nav_token: &[u8] = prefix.as_bytes();
+        let mut nav_token: &[u8] = prefix;
 
         loop {
             match traverse_match(current, nav_token) {
@@ -197,12 +210,13 @@ impl Node {
         }
     }
 
-    pub fn remove(&mut self, prefix: &str) -> Option<i32> {
-        let mut current: &mut Node = self;
+    pub fn remove(&mut self, prefix: &[u8]) -> Option<i32>
+    {
+        let mut current: &mut Node<K> = self;
         let mut item: Playback;
         let mut counter: u32 = 0;
-        let mut temp: &mut Box<Node>;
-        let mut temp_box: Box<Node>;
+        let mut temp: &mut Box<Node<K>>;
+        let mut temp_box: Box<Node<K>>;
         let mut value: Option<i32> = None;
 
         //println!("xx1");
@@ -247,7 +261,7 @@ impl Node {
         value
     }
 
-    fn handle_passthrough(&mut self, edge_key: u8, merge_key: u8) -> Box<Node> {
+    fn handle_passthrough(&mut self, edge_key: u8, merge_key: u8) -> Box<Node<K>> {
         let current = self;
 
         /*
@@ -311,15 +325,15 @@ impl Node {
     }
 }
 
-impl Node {
-    pub(crate) fn iter(&self) -> LabelsIter<'_> {
+impl<K> Node<K> {
+    pub(crate) fn iter(&self) -> LabelsIter<'_, K> {
         LabelsIter::new(self)
     }
 }
 
-impl <'a> IntoIterator for &'a Node {
+impl <'a, K> IntoIterator for &'a Node<K> {
     type Item = &'a [u8];
-    type IntoIter = LabelsIter<'a>;
+    type IntoIter = LabelsIter<'a, K>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()

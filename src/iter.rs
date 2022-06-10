@@ -1,21 +1,21 @@
 use std::iter::Peekable;
 use crate::node::{Node, NodeEdgesValueIter};
 
-pub type LabelsIter<'a> = NodeDFSIter<'a>;
-type ItemsIter<'a> = Peekable<Box<NodeEdgesValueIter<'a>>>;
+pub type LabelsIter<'a, K> = NodeDFSIter<'a, K>;
+type ItemsIter<'a, K> = Peekable<Box<NodeEdgesValueIter<'a, K>>>;
 
 #[derive(Debug)]
-enum IterType<'a>{
-    Item(&'a Node),
-    Iter(ItemsIter<'a>),
+enum IterType<'a, K> {
+    Item(&'a Node<K>),
+    Iter(ItemsIter<'a, K>),
 }
 
-pub struct NodeDFSIter<'a> {
-    current: Option<IterType<'a>>,
-    unvisited: Vec<IterType<'a>>,
+pub struct NodeDFSIter<'a, K> {
+    current: Option<IterType<'a, K>>,
+    unvisited: Vec<IterType<'a, K>>,
 }
 
-impl<'a> Default for NodeDFSIter<'a> {
+impl<'a, K: 'a> Default for NodeDFSIter<'a, K> {
     fn default() -> Self {
         NodeDFSIter {
             current: None,
@@ -24,25 +24,22 @@ impl<'a> Default for NodeDFSIter<'a> {
     }
 }
 
+// NodeDFSIter methods
 
-impl<'a> NodeDFSIter<'a> {
-    pub fn new(node: &'a Node) -> NodeDFSIter<'a> {
+impl<'a, K: 'a> NodeDFSIter<'a, K> {
+    pub fn new(node: &'a Node<K>) -> NodeDFSIter<'a, K> {
         NodeDFSIter {
             current: Some(IterType::Item(node)),
             unvisited: Vec::new(),
         }
     }
 
-    pub fn empty() -> NodeDFSIter<'a> {
+    pub fn empty() -> NodeDFSIter<'a, K> {
         NodeDFSIter::default()
     }
-}
 
 
-// NodeDFSIter methods
-
-impl<'a> NodeDFSIter<'a> {
-    fn add_iter(&mut self, mut iter: ItemsIter<'a>) {
+    fn add_iter(&mut self, mut iter: ItemsIter<'a, K>) {
         if let Some(n) = iter.next() {
             self.current = Some(IterType::Item(n));
             if let Some(_) = iter.peek() {
@@ -52,10 +49,10 @@ impl<'a> NodeDFSIter<'a> {
     }
 }
 
-impl<'a> Iterator for NodeDFSIter<'a> {
+impl<'a, K: 'a> Iterator for NodeDFSIter<'a, K> {
     type Item = &'a [u8];
     fn next(&mut self) -> Option<Self::Item> {
-        let mut iter: ItemsIter;
+        let mut iter: ItemsIter<K>;
 
         loop {
             match self.current.take() {
