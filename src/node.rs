@@ -1,4 +1,6 @@
 use std::mem;
+use std::ops::Deref;
+use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use std::collections::{HashMap};
@@ -113,19 +115,19 @@ impl<K, V> Node<K, V> {
     // If value already present return it and replace it
     // If value not already present, insert it creating new intermediate
     // nodes as necessary
-
-    fn insert_bridge(&mut self, byte_key: u8, common: Vec<u8>, suffix_edge: Vec<u8>) -> &mut Box<Node<K, V>> {
+    
+    fn insert_bridge(&mut self, byte_key: u8, common: Cow<[u8]>, suffix_edge: Cow<[u8]>) -> &mut Box<Node<K, V>> {
         if common.is_empty() || suffix_edge.is_empty() {
             unreachable!();
         }
 
-        let mut bridge_node = Box::new(Node::new(Some(common), NodeType::Inner, None));
+        let mut bridge_node = Box::new(Node::new(Some(common.into_owned()), NodeType::Inner, None));
         let mut old_node = self.edges.remove(&byte_key).unwrap();
 
         let next_byte_key = suffix_edge[0];
 
         // replace previous key with the edge suffix value (as the common prefix goes in the bridge node)
-        old_node.label.replace(suffix_edge);
+        old_node.label.replace(suffix_edge.into_owned());
 
         bridge_node.edges.insert(next_byte_key, old_node);
 
@@ -133,61 +135,75 @@ impl<K, V> Node<K, V> {
         self.edges.get_mut(&byte_key).unwrap()
     }
 
+
     fn next_helper(&mut self, key: u8) -> Option<& '_ mut Node<K, V>>{
         self.lookup_edge_mut(key).map(|box_ref| &mut **box_ref)
     }
 
-    pub fn insert(&mut self, prefix: &[u8], value: V) -> Option<V>
+
+    pub fn insert(&mut self, token: Cow<[u8]>, value: V) -> Option<V>
+//    pub fn insert(&mut self, prefix: &[u8], value: V) -> Option<V>
     {
         let mut current: &mut Node<K, V> = self;
         let mut temp_box: &mut Box<Node<K, V>>;
 
-        if prefix.is_empty() {
+        let mut nav_token: &[u8] = token.deref();
+        let mut label_cow: Cow<[u8]>;
+
+        if token.is_empty() {
             return None
         }
 
-        let mut nav_token: &[u8] = prefix;
-
         loop {
+            // To insert a new node, token slices are matched until we find a hole (None) so to speak,
+            // A different cow is created on each iteration, to signal our intent to delay memory allocation
+            // until absolutely necessary. Granted this is not a normal COW use case as we don't benefit from Deref
+            // despite whether its borrowed or owned..
+
+            label_cow = Cow::from(nav_token);
+
             match traverse_match(current, nav_token) {
                 // Success match with no leftovers, done searching
                 Some(KeyMatch {next: _, common: _ , leftover: SuffixType::Empty, edge_key}) => {
                     //                    current = next;
-
                     //println!("11 Traverse match Edge key is {:?}, current node is {:#?}", edge_key, current);
 
                     current = current.next_helper(edge_key).unwrap();
                     break
                 },
-                Some(KeyMatch {next: _, common: _, leftover: SuffixType::OnlyToken(sufx), edge_key}) => {
+                Some(KeyMatch {next: _, common: _, leftover: SuffixType::OnlyToken(sufxt), edge_key}) => {
                     //                    current = next;
                     //println!("1 Traverse match Edge key is {:?}, current node is {:#?}", edge_key, current);
-                    current = current.next_helper(edge_key).unwrap();
 
-                    nav_token = sufx
+                    nav_token = sufxt;
+                    current = current.next_helper(edge_key).unwrap();
                 },
-                Some(KeyMatch {next: _, common, leftover: SuffixType::OnlyEdge(sufx), edge_key}) => {
-                    //                    temp = current.insert_bridge(nav_token[0], common, sufx);
-                    let c = common.to_owned();
-                    let s = sufx.to_owned();
+                Some(KeyMatch {next: _, common, leftover: SuffixType::OnlyEdge(sufxe), edge_key}) => {
+                    let c = Cow::Owned(common.to_owned());
+                    let s = Cow::Owned(sufxe.to_owned());
+
                     temp_box = current.insert_bridge(edge_key, c, s);
                     current = &mut **temp_box;
+
                     break // no more token leftovers
                 },
                 Some(KeyMatch {next: _, common, leftover: SuffixType::BothEdgeToken(sufxe, sufxt), edge_key}) => {
-                    //temp = current.insert_bridge(nav_token[0], common, sufxe);
-                    let c = common.to_owned();
-                    let s = sufxe.to_owned();
+                    let c = Cow::Owned(common.to_owned());
+                    let s = Cow::Owned(sufxe.to_owned());
+
                     temp_box = current.insert_bridge(edge_key, c, s);
+                    current = &mut **temp_box;
+
                     nav_token = sufxt;
-                    current = &mut **temp_box
                 },
                 None => {
-                    let key = nav_token[0];
-                    let label = Some(nav_token.to_owned());
+                    // Match not found hence create new node and write new label
+                    let key = label_cow[0];
+                    let label = Some(label_cow.into_owned());
                     current.edges.insert(key, Box::new(Node::new(label, NodeType::Key, None)));
                     current = &mut **current.edges.get_mut(&key).unwrap();
-                    break;
+                    break
+
                 }
             };
         }
@@ -327,6 +343,8 @@ impl<K, V> Node<K, V> {
         passthrough
     }
 }
+
+
 
 impl<K, V> Node<K, V> {
     pub(crate) fn iter(&self) -> LabelsIter<'_, K, V> {

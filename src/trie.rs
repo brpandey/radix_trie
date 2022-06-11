@@ -1,5 +1,6 @@
-//use std::borrow::Borrow;
 use std::convert::AsRef;
+use std::borrow::Cow;
+
 use crate::node::Node;
 use crate::query::{longest_prefix, all_keys};
 use crate::iter::LabelsIter;
@@ -17,20 +18,21 @@ impl<K, V> Trie<K, V>
     }
 
     pub fn search(&self, token: K) -> Option<&'_ V>
-    where K: AsRef<[u8]>
+    where K: AsRef<[u8]> 
     {
         self.root.as_ref().and_then(|n| n.search(token.as_ref()))
     }
 
-    pub fn insert(&mut self, token: K, value: V) -> Option<V>
-    where K: AsRef<[u8]>
-//      where I: <ToOwned<Owned=Vec<u8>>
+    pub fn insert<T>(&mut self, token: T, value: V) -> Option<V>
+    where T: AsRef<[u8]>,
     {
         if self.root.is_none() {
             self.root = Some(Node::default());
         }
 
-        let result = self.root.as_mut().and_then(|n| n.insert(token.as_ref(), value));
+        let token_cow: Cow<[u8]> = token.as_ref().into();
+
+        let result = self.root.as_mut().and_then(|n| n.insert(token_cow, value));
 
         if result.is_none() {
             self.size += 1
@@ -40,8 +42,8 @@ impl<K, V> Trie<K, V>
     }
 
     pub fn longest_prefix(&self, token: K) -> Option<impl Iterator<Item = &'_ u8>>
-    where K: AsRef<[u8]>
-    { //Option<String> {
+    where K: AsRef<[u8]>   //Option<String> {
+    {
         self.root.as_ref().and_then(|n| longest_prefix(n, token.as_ref()))
     }
 
