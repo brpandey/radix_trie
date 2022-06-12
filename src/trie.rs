@@ -25,6 +25,7 @@ impl<K, V> Trie<K, V>
 
     pub fn insert<T>(&mut self, token: T, value: V) -> Option<V>
     where T: AsRef<[u8]>,
+          for<'a> &'a [u8]: Into<Cow<'a, [u8]>>,
     {
         if self.root.is_none() {
             self.root = Some(Node::default());
