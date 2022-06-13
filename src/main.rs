@@ -1,5 +1,6 @@
-// use radix_trie::trie::Trie;
+/// use radix_trie::trie::Trie;
 
 fn main() {
     println!("Radix Trie");
 }
+

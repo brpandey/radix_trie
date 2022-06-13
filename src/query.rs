@@ -4,8 +4,7 @@ use crate::node::{Node};
 use crate::traverse::{TraverseItem, TraverseType, TraverseResult, traverse};
 use crate::macros::enum_extract;
 
-pub fn longest_prefix<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> Option<impl Iterator<Item = &'a u8>> {
-                                                           // Option<String> {
+pub fn longest_prefix<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> Option<impl Iterator<Item = &'a u8>> { // Option<String> {
     let value: TraverseResult<K, V> =  traverse(node, prefix, TraverseType::FoldOrPartial)?;
     let mut stack = enum_extract!(value, TraverseResult::Stack);
 
@@ -26,6 +25,7 @@ pub fn longest_prefix<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> O
 
         if node.is_key() {
             prefixes = Vec::with_capacity(level as usize);
+
             // Ignore root label so start with 1
             prefixes = stack.drain(1..).fold(prefixes, |mut acc, TraverseItem{node: _, next_key: _, label, level: _}| {
                 if label.is_some() {
@@ -46,11 +46,6 @@ pub fn longest_prefix<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> O
     }
 
     result
-/*
-    result.map(|b| {
-        String::from_utf8(b).unwrap()
-    })
-    */
 }
 
 // Find all prefix keys which have the common prefix
@@ -95,8 +90,6 @@ pub fn all_keys<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> Option<
     while !backlog.is_empty() {
         let (current, bytes) = backlog.pop_front().unwrap();
 
-//        println!("ALL_KEYS bytes is {:?}, {:?}", bytes, current);
-
         for boxed_child_node_ref in current.edges_values_iter() {
             child = &**boxed_child_node_ref;
 
@@ -114,7 +107,6 @@ pub fn all_keys<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> Option<
 
         if current.is_key() {
             result.push(bytes)
-            //result.push(String::from_utf8(bytes).unwrap())
         }
     }
 

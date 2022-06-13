@@ -10,6 +10,7 @@ enum IterType<'a, K, V> {
     Iter(ItemsIter<'a, K, V>),
 }
 
+#[derive(Debug)]
 pub struct NodeDFSIter<'a, K, V> {
     current: Option<IterType<'a, K, V>>,
     unvisited: Vec<IterType<'a, K, V>>,

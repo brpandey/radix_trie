@@ -91,9 +91,6 @@ pub(crate) fn traverse_match<'a, 'b, K, V>(node: &'a Node<K, V>, token: &'b [u8]
             return None
         }
 
-        //println!("Item index {:?}, common match {:?}, token sufx {:?}, edge sufx {:?}", index,
-        //         std::str::from_utf8(common), std::str::from_utf8(token_suffix), std::str::from_utf8(edge_suffix));
-
         let leftover = SuffixType::new(edge_suffix, token_suffix);
         Some(KeyMatch::new(next_node, common, leftover, edge_key))
     } else {

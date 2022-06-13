@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use std::fmt::Debug;
+
 use crate::node::{Node, EdgeType};
 use crate::traverse::{traverse, TraverseItem, TraverseType, TraverseResult};
 use crate::macros::enum_extract;
@@ -60,8 +62,6 @@ pub fn capture<K, V>(current: &Node<K, V>, prefix: &[u8]) -> Option<DeletePlan> 
         if node.is_key() {
             replay.push(Playback::Unmark(Cursor::Node(level)));
 
-            //println!("unmark here, node to unmark is {:?}", &node);
-
             status.insert(Status::Deleted);
 
             // No child edges then can easily prune, otherwise if single we have a passthrough
@@ -111,18 +111,17 @@ pub fn capture<K, V>(current: &Node<K, V>, prefix: &[u8]) -> Option<DeletePlan> 
                     },
                     _ => unreachable!()
                 }
+
+
             },
             Action::Noop => {
-                replay.push(Playback::Keep(Cursor::Link(level, next_key)))
+                replay.push(Playback::Keep(Cursor::Link(level, next_key)));
             },
         }
 
-        action = Action::Noop;
-
-        //println!("capture status is {:?}, ode is {:?}", &status, &node);
-
         // passthrough is available once to be compressed after a single prune sequence
-        if status.contains(&Status::DeletedPruned) && status.len() == 1 &&
+        if action == Action::Prune &&
+            status.contains(&Status::DeletedPruned) && status.len() == 1 &&
             !node.is_key() && node.edge_type().unwrap() == EdgeType::Branching(2) {
 
                 // record key that will be used as the merge key / merge node
@@ -135,10 +134,66 @@ pub fn capture<K, V>(current: &Node<K, V>, prefix: &[u8]) -> Option<DeletePlan> 
                 replay.push(item);
 
                 action = Action::Merge
+            } else {
+                action = Action::Noop
             }
     }
 
-    // replay is empty or predicate is false, return None
+    // If replay is empty (or predicate is false) return None otherwise Some
     Some(replay).filter(|r| !r.is_empty())
 
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::trie::Trie;
+
+    use Playback as P;
+    use Cursor as C;
+
+    #[test]
+    fn check_delete_plan() {
+        let mut trie: Trie<_, _> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().rev().cloned().collect();
+
+        // skip the first &str "and" then delete it after the loop
+        let result = vec!["anthemion", "anthem", "and", "anti"];
+
+        let mut i = 0;
+
+        let root = trie.root();
+        let pb = capture(root.unwrap(), result[i].as_bytes()).unwrap();
+
+        assert_eq!(pb, vec![P::Unmark(C::Node(4)), P::Prune(C::Link(3, 105)),
+                            P::Keep(C::Link(2, 104)), P::Keep(C::Link(1, 116)), P::Keep(C::Link(0, 97))]);
+
+        trie.remove(&result[i]);
+        i+=1;
+
+        let root = trie.root();
+        let pb = capture(root.unwrap(), result[i].as_bytes()).unwrap();
+
+        assert_eq!(pb, vec![P::Unmark(C::Node(3)), P::Prune(C::Link(2, 104)), P::Merge(C::DoubleLink(1, 116, 105)), P::Keep(C::Link(0, 97))]);
+
+        trie.remove(&result[i]);
+        i+=1;
+
+        let root = trie.root();
+        let pb = capture(root.unwrap(), result[i].as_bytes()).unwrap();
+
+        assert_eq!(pb, vec![P::Unmark(C::Node(2)), P::Prune(C::Link(1, 100)), P::Merge(C::DoubleLink(0, 97, 116))]);
+
+        trie.remove(&result[i]);
+        i+=1;
+
+        let root = trie.root();
+        let pb = capture(root.unwrap(), "anti".as_bytes()).unwrap();
+
+        assert_eq!(pb, vec![P::Unmark(C::Node(1)), P::Prune(C::Link(0, 97))]);
+
+        trie.remove(&result[i]);
+
+        assert!(trie.is_empty());
+    }
 }

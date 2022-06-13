@@ -1,5 +1,7 @@
 use std::mem;
 use std::ops::Deref;
+use std::fmt;
+
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
@@ -9,14 +11,13 @@ use crate::iter::LabelsIter;
 use crate::delete::{Playback, Cursor, capture};
 use crate::traverse::{TraverseType, TraverseResult, KeyMatch, SuffixType, traverse_match, traverse};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-// #[derive(Debug)] - define custom Debug?
 
 // Since generics and traits work hand in hand and we want to use the trait AsRef<[u8]>
 // for our Trie, since we don't actually store a key type K in the node but instead a Vec<u8>, we
 // simulate that we store a K with the zero-sized unused field key as a PhantomData type
 // To prevent the unused K from affecting the drop check anaylsis it is wrapped in an fn() (just like Empty Iterator)
 
+#[derive(Clone, PartialEq, Eq)]
 pub struct Node<K, V> {
     label: Option<Vec<u8>>,
     value: Option<Box<V>>,
@@ -36,6 +37,21 @@ impl<K, V> Default for Node<K, V> {
         }
     }
 }
+
+
+impl<K, V> fmt::Debug for Node<K, V> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("Node")
+            .field("label", &self.label.as_deref())
+            .field("value", &format_args!(".."))
+            //.field("value", &self.value.as_deref())
+            .field("tag", &self.tag)
+            .field("edges", &self.edges)
+            //.field("key", &format_args!("_"))
+            .finish()
+    }
+}
+
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum NodeType {
@@ -100,8 +116,7 @@ impl<K, V> Node<K, V> {
         self.edges.get_mut(&first)
     }
 
-    pub fn search(&self, prefix: &[u8]) -> Option<&'_ V> 
-    {
+    pub fn search(&self, prefix: &[u8]) -> Option<&'_ V> {
         let current: &Node<K, V> = self;
         let result: TraverseResult<K, V> = traverse(current, prefix, TraverseType::Search)?;
 
@@ -115,7 +130,7 @@ impl<K, V> Node<K, V> {
     // If value already present return it and replace it
     // If value not already present, insert it creating new intermediate
     // nodes as necessary
-    
+
     fn insert_bridge(&mut self, byte_key: u8, common: Cow<[u8]>, suffix_edge: Cow<[u8]>) -> &mut Box<Node<K, V>> {
         if common.is_empty() || suffix_edge.is_empty() {
             unreachable!();
@@ -136,19 +151,20 @@ impl<K, V> Node<K, V> {
     }
 
 
-    fn next_helper(&mut self, key: u8) -> Option<& '_ mut Node<K, V>>{
+    fn next_helper(&mut self, key: u8) -> Option<& '_ mut Node<K, V>> {
         self.lookup_edge_mut(key).map(|box_ref| &mut **box_ref)
     }
 
 
-    pub fn insert(&mut self, token: Cow<[u8]>, value: V) -> Option<V>
-//    pub fn insert(&mut self, prefix: &[u8], value: V) -> Option<V>
-    {
+    pub fn insert(&mut self, token: Cow<[u8]>, value: V) -> Option<V> {
         let mut current: &mut Node<K, V> = self;
         let mut temp_box: &mut Box<Node<K, V>>;
 
         let mut nav_token: &[u8] = token.deref();
-        let mut label_cow: Cow<[u8]>;
+        let mut input_label: Cow<[u8]>;
+
+        let mut interior_label1: Cow<[u8]>;
+        let mut interior_label2: Cow<[u8]>;
 
         if token.is_empty() {
             return None
@@ -160,46 +176,40 @@ impl<K, V> Node<K, V> {
             // until absolutely necessary. Granted this is not a normal COW use case as we don't benefit from Deref
             // despite whether its borrowed or owned..
 
-            label_cow = Cow::from(nav_token);
+            input_label = Cow::from(nav_token);
 
             match traverse_match(current, nav_token) {
                 // Success match with no leftovers, done searching
                 Some(KeyMatch {next: _, common: _ , leftover: SuffixType::Empty, edge_key}) => {
-                    //                    current = next;
-                    //println!("11 Traverse match Edge key is {:?}, current node is {:#?}", edge_key, current);
-
                     current = current.next_helper(edge_key).unwrap();
                     break
                 },
                 Some(KeyMatch {next: _, common: _, leftover: SuffixType::OnlyToken(sufxt), edge_key}) => {
-                    //                    current = next;
-                    //println!("1 Traverse match Edge key is {:?}, current node is {:#?}", edge_key, current);
-
                     nav_token = sufxt;
                     current = current.next_helper(edge_key).unwrap();
                 },
                 Some(KeyMatch {next: _, common, leftover: SuffixType::OnlyEdge(sufxe), edge_key}) => {
-                    let c = Cow::Owned(common.to_owned());
-                    let s = Cow::Owned(sufxe.to_owned());
+                    interior_label1 = common.to_owned().into();
+                    interior_label2 = sufxe.to_owned().into();
 
-                    temp_box = current.insert_bridge(edge_key, c, s);
+                    temp_box = current.insert_bridge(edge_key, interior_label1, interior_label2);
                     current = &mut **temp_box;
 
                     break // no more token leftovers
                 },
                 Some(KeyMatch {next: _, common, leftover: SuffixType::BothEdgeToken(sufxe, sufxt), edge_key}) => {
-                    let c = Cow::Owned(common.to_owned());
-                    let s = Cow::Owned(sufxe.to_owned());
+                    interior_label1 = common.to_owned().into();
+                    interior_label2 = sufxe.to_owned().into();
 
-                    temp_box = current.insert_bridge(edge_key, c, s);
+                    temp_box = current.insert_bridge(edge_key, interior_label1, interior_label2);
                     current = &mut **temp_box;
 
                     nav_token = sufxt;
                 },
                 None => {
                     // Match not found hence create new node and write new label
-                    let key = label_cow[0];
-                    let label = Some(label_cow.into_owned());
+                    let key = input_label[0];
+                    let label = Some(input_label.into_owned());
                     current.edges.insert(key, Box::new(Node::new(label, NodeType::Key, None)));
                     current = &mut **current.edges.get_mut(&key).unwrap();
                     break
@@ -229,8 +239,7 @@ impl<K, V> Node<K, V> {
         }
     }
 
-    pub fn remove(&mut self, prefix: &[u8]) -> Option<V>
-    {
+    pub fn remove(&mut self, prefix: &[u8]) -> Option<V> {
         let mut current: &mut Node<K, V> = self;
         let mut item: Playback;
         let mut counter: u32 = 0;
@@ -238,11 +247,7 @@ impl<K, V> Node<K, V> {
         let mut temp_box: Box<Node<K, V>>;
         let mut value: Option<V> = None;
 
-        //println!("xx1");
-
         let mut replay = capture(&current, prefix)?;
-
-        //println!("xx2, replay stack is {:?}", replay);
 
         // As long as replay plan isn't empty follow the plan
         while !replay.is_empty() {
@@ -320,30 +325,21 @@ impl<K, V> Node<K, V> {
         // y
         let mut passthrough = current.edges.remove(&edge_key).unwrap();
 
-        //println!("xxp2 passthrough is {:?}", passthrough);
-
         // merge key is key to y'
         // remove y' from y
         let mut merged = passthrough.edges.remove(&merge_key).unwrap();
-
-        //println!("xxp2.3 merged is now {:?}", &merged);
-
         let mut la = passthrough.label.take().unwrap();
         let lb = &mut merged.label.take().unwrap();
         la.append(lb);
 
-        //          let lab = la.zip(lb).map(|(&mut v1, &mut v2)| v1.append(v2)).unwrap();
         merged.label.replace(la);
 
         // Here we perform the actual compression by inserting y' into y's old spot
         current.edges.insert(edge_key, merged);
 
-        //            println!("xxp2.5 removed passthrough is now {:?}", passthrough);
-        //println!("xxp2.7 current is now {:?}", &current);
         passthrough
     }
 }
-
 
 
 impl<K, V> Node<K, V> {

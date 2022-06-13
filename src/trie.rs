@@ -24,15 +24,13 @@ impl<K, V> Trie<K, V>
     }
 
     pub fn insert<T>(&mut self, token: T, value: V) -> Option<V>
-    where T: AsRef<[u8]>,
-          for<'a> &'a [u8]: Into<Cow<'a, [u8]>>,
+    where T: AsRef<[u8]>
     {
         if self.root.is_none() {
             self.root = Some(Node::default());
         }
 
         let token_cow: Cow<[u8]> = token.as_ref().into();
-
         let result = self.root.as_mut().and_then(|n| n.insert(token_cow, value));
 
         if result.is_none() {
@@ -74,6 +72,13 @@ impl<K, V> Trie<K, V>
 
         result
     }
+
+
+    #[allow(dead_code)]
+    pub(crate) fn root(&self) -> Option<&Node<K, V>> {
+        self.root.as_ref()
+    }
+
 }
 
 
@@ -158,11 +163,11 @@ mod tests {
         labels.map(|bytes| std::str::from_utf8(bytes).unwrap()).collect::<BTreeSet<&str>>()
     }
 
-    /*
-    fn print_labels<'a>(labels: Labels<'a>) {
+/*
+    fn print_labels<'a, K: 'a, V: 'a>(labels: Labels<'a, K, V>) {
         println!("labels are {:?}", labels_helper(labels))
     }
-    */
+*/
 
     #[test]
     fn search_basic() {
@@ -199,8 +204,6 @@ mod tests {
         assert_eq!(&&vip, trie.search("anthem").unwrap());
     }
 
-
-
     #[test]
     fn check_all_keys() {
         let trie: Trie<_, _> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
@@ -233,7 +236,6 @@ mod tests {
         assert_eq!("anthem", std::str::from_utf8(&result).unwrap());
     }
 
-     
 
     #[test]
     fn passthru_removes() {
@@ -258,6 +260,7 @@ mod tests {
 
         assert_eq!(vec!["and", "anthemion"], result);
     }
+
 
 
     #[test]
@@ -327,6 +330,6 @@ mod tests {
             trie.remove(k);
         }
     }
-    
+  
 }
 
