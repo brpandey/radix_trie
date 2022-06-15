@@ -3,9 +3,11 @@ Radix Trie
 
 A simple space-optimized trie written in Rust
 
+Upon deletion handles a combination of unmarking, pruning, and compression
 
 <p float="left">
-  <img src='images/insert.png' width='815' height='450'/> 
+  <img src='images/insert.png' width='845' height='450'/> 
 </p>
 
-Bibek
+Thanks!
+Bibek Pandey

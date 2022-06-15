@@ -6,9 +6,10 @@ pub(crate) type TraverseStack<'a, K, V> = Vec<TraverseItem<'a, K, V>>;
 pub(crate) enum TraverseType {
     Search,
     Fold,
-    FoldOrPartial,  // If key doesn't completely exist in tree, grab a partial fold
+    FoldOrPartial,  // If full key doesn't completely exist in tree, grab a partial fold (longest prefix)
 }
 
+// KeyMatch represents the match state after a token match with an interior label
 #[derive(Debug)]
 pub(crate) struct KeyMatch<'a, 'b, K: 'a, V: 'a> {
     pub(crate) next: &'a Node<K, V>,
@@ -17,6 +18,7 @@ pub(crate) struct KeyMatch<'a, 'b, K: 'a, V: 'a> {
     pub(crate) edge_key: u8,
 }
 
+// Defines the leftover suffix that wasn't matched with the interior label
 #[derive(Debug)]
 pub(crate) enum SuffixType<'a, 'b> {
     Empty,
@@ -25,6 +27,7 @@ pub(crate) enum SuffixType<'a, 'b> {
     OnlyEdge(&'a [u8]), // edge and token-prefix match
 }
 
+// Defines Stack item struct type
 #[derive(Debug)]
 pub(crate) struct TraverseItem<'a, K: 'a, V: 'a>{
     pub(crate) node: &'a Node<K, V>,
@@ -32,6 +35,7 @@ pub(crate) struct TraverseItem<'a, K: 'a, V: 'a>{
     pub(crate) label: Option<&'a [u8]>,
     pub(crate) level: u32,
 }
+
 
 #[derive(Debug)]
 pub(crate) enum TraverseResult<'a, K: 'a, V: 'a> {
@@ -63,7 +67,7 @@ impl<'a, 'b> SuffixType<'a, 'b> {
     }
 }
 
-
+// Matches token and relevant interior label
 pub(crate) fn traverse_match<'a, 'b, K, V>(node: &'a Node<K, V>, token: &'b [u8]) -> Option<KeyMatch<'a, 'b, K, V>> {
     let mut index = 0;
     let next_node: &Node<K, V>;
@@ -98,7 +102,7 @@ pub(crate) fn traverse_match<'a, 'b, K, V>(node: &'a Node<K, V>, token: &'b [u8]
     }
 }
 
-
+// Iterates through trie matching interior labels, accumulating a result
 pub(crate) fn traverse<'a, 'b, K, V>(node: &'a Node<K, V>, token: &'b [u8], traverse_type: TraverseType) -> Option<TraverseResult<'a, K, V>> {
     let mut stack: TraverseStack<K, V> = Vec::new();
     let mut current: &Node<K, V> = node;
@@ -158,6 +162,8 @@ pub(crate) fn traverse<'a, 'b, K, V>(node: &'a Node<K, V>, token: &'b [u8], trav
         }
     }
 
+    // Handle edge cases if we found search key but in middle of a label or
+    // Complete prefix not found in trie for fold
     let value =
         match traverse_type {
             TraverseType::Search => {
@@ -174,6 +180,7 @@ pub(crate) fn traverse<'a, 'b, K, V>(node: &'a Node<K, V>, token: &'b [u8], trav
     Some(value)
 }
 
+// Helper function to push onto stack 
 fn traverse_fold_helper<'a, 's, K, V>(node: &'a Node<K, V>, level: u32,
                                     stack: &'s mut TraverseStack<'a, K, V>, traverse_type: TraverseType) {
     match traverse_type {

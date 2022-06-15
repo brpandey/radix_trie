@@ -52,7 +52,7 @@ impl<K, V> fmt::Debug for Node<K, V> {
     }
 }
 
-
+// A key node contains a value and inner node does not
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum NodeType {
     Key,
@@ -63,6 +63,7 @@ impl Default for NodeType {
     fn default() -> Self { NodeType::Inner }
 }
 
+// Define type which characterizes number of node outgoing edges
 #[derive(Debug, PartialEq)]
 pub enum EdgeType {
     Single, // Exactly 1
@@ -84,6 +85,7 @@ impl<K, V> Node<K, V> {
         }
     }
 
+    // Returns key fragment label associated with node
     pub(crate) fn label(&self) -> Option<&[u8]> {
         self.label.as_deref()
     }
@@ -116,6 +118,7 @@ impl<K, V> Node<K, V> {
         self.edges.get_mut(&first)
     }
 
+    // Retrieves value associated with prefix token
     pub fn search(&self, prefix: &[u8]) -> Option<&'_ V> {
         let current: &Node<K, V> = self;
         let result: TraverseResult<K, V> = traverse(current, prefix, TraverseType::Search)?;
@@ -126,11 +129,8 @@ impl<K, V> Node<K, V> {
         }
     }
 
-
-    // If value already present return it and replace it
-    // If value not already present, insert it creating new intermediate
-    // nodes as necessary
-
+    // Helper function to insert bridge node which provides a fork to contain an existing node
+    // And create space for a new key fragment
     fn insert_bridge(&mut self, byte_key: u8, common: Cow<[u8]>, suffix_edge: Cow<[u8]>) -> &mut Box<Node<K, V>> {
         if common.is_empty() || suffix_edge.is_empty() {
             unreachable!();
@@ -155,6 +155,9 @@ impl<K, V> Node<K, V> {
         self.lookup_edge_mut(key).map(|box_ref| &mut **box_ref)
     }
 
+    // If value already present return it and replace it
+    // If value not already present, insert it creating new intermediate
+    // nodes as necessary
 
     pub fn insert(&mut self, token: Cow<[u8]>, value: V) -> Option<V> {
         let mut current: &mut Node<K, V> = self;
@@ -239,6 +242,8 @@ impl<K, V> Node<K, V> {
         }
     }
 
+    // Removes node from tree either by unmarking node as a key node, pruning trie or compressing nodes
+    // or a combination of both.  Relies on a generated delete plan for guidance
     pub fn remove(&mut self, prefix: &[u8]) -> Option<V> {
         let mut current: &mut Node<K, V> = self;
         let mut item: Playback;
@@ -285,6 +290,8 @@ impl<K, V> Node<K, V> {
         value
     }
 
+    // Helper function to merge a passthrough node and its replacement to save space
+    // Restores the tree's integrity after a delete by combining once separate labels
     fn handle_passthrough(&mut self, edge_key: u8, merge_key: u8) -> Box<Node<K, V>> {
         let current = self;
 
@@ -340,7 +347,6 @@ impl<K, V> Node<K, V> {
         passthrough
     }
 }
-
 
 impl<K, V> Node<K, V> {
     pub(crate) fn iter(&self) -> LabelsIter<'_, K, V> {

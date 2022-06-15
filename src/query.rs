@@ -4,6 +4,8 @@ use crate::node::{Node};
 use crate::traverse::{TraverseItem, TraverseType, TraverseResult, traverse};
 use crate::macros::enum_extract;
 
+// Finds the longest path that corresponds to the prefix token, one that fully captures
+// the token or part of it and return it as an iterator
 pub fn longest_prefix<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> Option<impl Iterator<Item = &'a u8>> { // Option<String> {
     let value: TraverseResult<K, V> =  traverse(node, prefix, TraverseType::FoldOrPartial)?;
     let mut stack = enum_extract!(value, TraverseResult::Stack);
@@ -75,10 +77,9 @@ pub fn all_keys<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> Option<
     let mut child_bytes: Vec<u8>;
     let mut label_slice: &[u8];
 
-    // Using BFS
-
     let mut seed = prefix.to_vec();
 
+    // add in the leftover suffix edge if only a partial match was achieved
     match leftover {
         None => backlog.push_back((current, seed)),
         Some(extra) => {
@@ -87,17 +88,18 @@ pub fn all_keys<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> Option<
         },
     }
 
+    // Using BFS to construct the matching keys with the shared common prefix
     while !backlog.is_empty() {
         let (current, bytes) = backlog.pop_front().unwrap();
 
         for boxed_child_node_ref in current.edges_values_iter() {
             child = &**boxed_child_node_ref;
 
-            // Since bytes is being accessed by node child siblings, we clone it
+            // Since bytes is being accessed by other node child siblings, clone it
             child_bytes = bytes.clone();
             label_slice = child.label().unwrap();
 
-            // preallocate extra space and add to new_bytes
+            // preallocate extra space and then add
             child_bytes.reserve(label_slice.len());
             child_bytes.extend(label_slice.iter());
 

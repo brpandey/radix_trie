@@ -17,12 +17,15 @@ impl<K, V> Trie<K, V>
         Trie { size: 0, root: None }
     }
 
+    // Retrieves key's stored value
+    // (key is not in fact stored only its fragments)
     pub fn search(&self, token: K) -> Option<&'_ V>
     where K: AsRef<[u8]> 
     {
         self.root.as_ref().and_then(|n| n.search(token.as_ref()))
     }
 
+    // Insert's value into Trie along with a fragment of key if not already resident
     pub fn insert<T>(&mut self, token: T, value: V) -> Option<V>
     where T: AsRef<[u8]>
     {
@@ -40,12 +43,14 @@ impl<K, V> Trie<K, V>
         result
     }
 
+    // Returns iterator of longest prefix of token that exists in trie
     pub fn longest_prefix(&self, token: K) -> Option<impl Iterator<Item = &'_ u8>>
     where K: AsRef<[u8]>   //Option<String> {
     {
         self.root.as_ref().and_then(|n| longest_prefix(n, token.as_ref()))
     }
 
+    // Returns all keys whic share a common token prefix
     pub fn all_keys(&self, token: K) -> Option<Vec<Vec<u8>>>
     where K: AsRef<[u8]>
     {
@@ -61,6 +66,8 @@ impl<K, V> Trie<K, V>
         self.size = 0
     }
 
+    // Removes token value and leftover key fragments as necessary
+    // to the extent of possibly pruning or merging nodes
     pub fn remove(&mut self, token: K) -> Option<V>
     where K: AsRef<[u8]>
     {

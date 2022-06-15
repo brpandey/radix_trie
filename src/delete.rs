@@ -8,6 +8,10 @@ use crate::macros::enum_extract;
 
 type DeletePlan = Vec<Playback>;
 
+// Specifies node level and edge_key when traversing along a node path
+// of a given prefix
+// e.g. Link(3, 104) denotes a node at level 3 with edge key 104
+// (root being level 0)
 #[derive(Debug, PartialEq)]
 pub enum Cursor {
     Node(u32),
@@ -15,6 +19,8 @@ pub enum Cursor {
     DoubleLink(u32, u8, u8),
 }
 
+// Tags the node operation type given a prefix's node path
+// e.g. Unmark means we set it up for deletion by removing its key status
 #[derive(Debug, PartialEq)]
 pub enum Playback {
     Unmark(Cursor),
@@ -24,6 +30,8 @@ pub enum Playback {
     Keep(Cursor),
 }
 
+// State to track what operations have been performed
+// while a delete plan is being created
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum Status {
     Deleted,
@@ -31,6 +39,8 @@ pub enum Status {
     Merged,
 }
 
+// Internal action states used during
+// delete plan formation
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum Action {
     Prune,
@@ -39,10 +49,11 @@ pub enum Action {
 }
 
 // In order to delete a node without using back or parent links we create a replay stack which
-// gives us the required info to delete a node or prune nodes while iterating a single mutable pointer
-// starting from the trie root node
-// (While Rust supports recursion but not tail recursion this explicit stack somewhat likens
-// to a call stack with no limitations of potentially blowing the call stack)
+// gives us the required "plan" "info that only uses copy semantics to aid in eventual
+// deleting a node or pruning a node's edge with a single mutable ref
+
+// (Rust supports recursion yet not tail recursion - the explicit stack is on the heap
+// so it avoids  concerns of potentially blowing the call stack for long sequences)
 pub fn capture<K, V>(current: &Node<K, V>, prefix: &[u8]) -> Option<DeletePlan> {
     let mut replay: Vec<Playback> = Vec::new();
     let mut status: HashSet<Status> = HashSet::new();
@@ -64,12 +75,11 @@ pub fn capture<K, V>(current: &Node<K, V>, prefix: &[u8]) -> Option<DeletePlan> 
 
             status.insert(Status::Deleted);
 
-            // No child edges then can easily prune, otherwise if single we have a passthrough
-
+            // If no child edges then can easily prune, otherwise if single we have a passthrough
             match node.edge_type() {
                 None => action = Action::Prune,
                 Some(EdgeType::Single) => {
-                    // record key that will be used as the merge key / merge node
+                    // store key (temporarily) that will be used as the merge key / merge node
                     // when we merge the passthrough node's label with the merge node
                     let merge_key = node.edges_keys_iter().copied().collect::<Vec<u8>>().pop().unwrap();
 
@@ -83,7 +93,7 @@ pub fn capture<K, V>(current: &Node<K, V>, prefix: &[u8]) -> Option<DeletePlan> 
         }
     }
 
-    // Essentially we work backwards from the node we want to delete
+    // Work backwards from the node we want to delete
     while !stack.is_empty() {
         let TraverseItem{node, next_key, label: _, level} = stack.pop().unwrap();
 
@@ -94,14 +104,17 @@ pub fn capture<K, V>(current: &Node<K, V>, prefix: &[u8]) -> Option<DeletePlan> 
                 let item = Playback::Prune(info);
                 replay.push(item);
 
-                // Only prune once since when we insert everything is already compressed,
-                // only have to prune the outgoing edge to the node to delete
+                // Prune once since when we insert, everything is already compressed,
+                // only have to prune the outgoing edge of parent to the node to delete
 
                 status.remove(&Status::Deleted);
                 status.insert(Status::DeletedPruned);
             },
             Action::Merge => {
                 match replay.pop() {
+                    // Form double link cursor used with eventual merge operation
+                    // if level marks node x, next_key refers to child node x''
+                    // and merge_key refers to grand child node x'''
                     Some(Playback::MergeTemp(merge_key)) => {
                         let info = Cursor::DoubleLink(level, next_key, merge_key);
                         let item = Playback::Merge(info);
@@ -111,15 +124,13 @@ pub fn capture<K, V>(current: &Node<K, V>, prefix: &[u8]) -> Option<DeletePlan> 
                     },
                     _ => unreachable!()
                 }
-
-
             },
             Action::Noop => {
                 replay.push(Playback::Keep(Cursor::Link(level, next_key)));
             },
         }
 
-        // passthrough is available once to be compressed after a single prune sequence
+        // A  passthrough node is able to be compressed only after a single prune
         if action == Action::Prune &&
             status.contains(&Status::DeletedPruned) && status.len() == 1 &&
             !node.is_key() && node.edge_type().unwrap() == EdgeType::Branching(2) {
@@ -153,6 +164,7 @@ mod tests {
     use Playback as P;
     use Cursor as C;
 
+    // Verify the delete plan that is generated for these prefix tokens is accurate
     #[test]
     fn check_delete_plan() {
         let mut trie: Trie<_, _> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().rev().cloned().collect();
