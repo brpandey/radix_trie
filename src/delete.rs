@@ -8,8 +8,7 @@ use crate::macros::enum_extract;
 
 type DeletePlan = Vec<Playback>;
 
-// Specifies node level and edge_key when traversing along a node path
-// of a given prefix
+// Specifies node level and edge_key when traversing along a node path of a given prefix
 // e.g. Link(3, 104) denotes a node at level 3 with edge key 104
 // (root being level 0)
 #[derive(Debug, PartialEq)]
@@ -68,7 +67,7 @@ pub fn capture<K, V>(current: &Node<K, V>, prefix: &[u8]) -> Option<DeletePlan> 
     let result: TraverseResult<K, V> =  traverse(current, prefix, TraverseType::Fold)?;
     let mut stack = enum_extract!(result, TraverseResult::Stack);
 
-    //prepopulated stack given prefix and trie
+    // Prepopulated stack given prefix and trie
     if let Some(TraverseItem{node, next_key: _, label: _, level}) = stack.pop() {
         if node.is_key() {
             replay.push(Playback::Unmark(Cursor::Node(level)));
@@ -79,7 +78,7 @@ pub fn capture<K, V>(current: &Node<K, V>, prefix: &[u8]) -> Option<DeletePlan> 
             match node.edge_type() {
                 None => action = Action::Prune,
                 Some(EdgeType::Single) => {
-                    // store key (temporarily) that will be used as the merge key / merge node
+                    // Store key (temporarily) that will be used as the merge key / merge node
                     // when we merge the passthrough node's label with the merge node
                     let merge_key = node.edges_keys_iter().copied().collect::<Vec<u8>>().pop().unwrap();
 
@@ -112,9 +111,11 @@ pub fn capture<K, V>(current: &Node<K, V>, prefix: &[u8]) -> Option<DeletePlan> 
             },
             Action::Merge => {
                 match replay.pop() {
+                    
                     // Form double link cursor used with eventual merge operation
                     // if level marks node x, next_key refers to child node x''
                     // and merge_key refers to grand child node x'''
+                    
                     Some(Playback::MergeTemp(merge_key)) => {
                         let info = Cursor::DoubleLink(level, next_key, merge_key);
                         let item = Playback::Merge(info);
@@ -130,12 +131,12 @@ pub fn capture<K, V>(current: &Node<K, V>, prefix: &[u8]) -> Option<DeletePlan> 
             },
         }
 
-        // A  passthrough node is able to be compressed only after a single prune
+        // A passthrough node is able to be compressed only after a single prune
         if action == Action::Prune &&
             status.contains(&Status::DeletedPruned) && status.len() == 1 &&
             !node.is_key() && node.edge_type().unwrap() == EdgeType::Branching(2) {
 
-                // record key that will be used as the merge key / merge node
+                // Record key that will be used as the merge key / merge node
                 // when we merge the passthrough node's label with the merge node
                 let mut set = node.edges_keys_iter().collect::<HashSet<_>>();
                 set.remove(&next_key);
@@ -169,7 +170,6 @@ mod tests {
     fn check_delete_plan() {
         let mut trie: Trie<_, _> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().rev().cloned().collect();
 
-        // skip the first &str "and" then delete it after the loop
         let result = vec!["anthemion", "anthem", "and", "anti"];
 
         let mut i = 0;
@@ -177,6 +177,7 @@ mod tests {
         let root = trie.root();
         let pb = capture(root.unwrap(), result[i].as_bytes()).unwrap();
 
+        // anthemion
         assert_eq!(pb, vec![P::Unmark(C::Node(4)), P::Prune(C::Link(3, 105)),
                             P::Keep(C::Link(2, 104)), P::Keep(C::Link(1, 116)), P::Keep(C::Link(0, 97))]);
 
@@ -185,7 +186,8 @@ mod tests {
 
         let root = trie.root();
         let pb = capture(root.unwrap(), result[i].as_bytes()).unwrap();
-
+        
+        // anthem
         assert_eq!(pb, vec![P::Unmark(C::Node(3)), P::Prune(C::Link(2, 104)), P::Merge(C::DoubleLink(1, 116, 105)), P::Keep(C::Link(0, 97))]);
 
         trie.remove(&result[i]);
@@ -194,6 +196,7 @@ mod tests {
         let root = trie.root();
         let pb = capture(root.unwrap(), result[i].as_bytes()).unwrap();
 
+        // and
         assert_eq!(pb, vec![P::Unmark(C::Node(2)), P::Prune(C::Link(1, 100)), P::Merge(C::DoubleLink(0, 97, 116))]);
 
         trie.remove(&result[i]);
@@ -202,6 +205,7 @@ mod tests {
         let root = trie.root();
         let pb = capture(root.unwrap(), "anti".as_bytes()).unwrap();
 
+        // anti
         assert_eq!(pb, vec![P::Unmark(C::Node(1)), P::Prune(C::Link(0, 97))]);
 
         trie.remove(&result[i]);

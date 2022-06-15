@@ -180,7 +180,7 @@ pub(crate) fn traverse<'a, 'b, K, V>(node: &'a Node<K, V>, token: &'b [u8], trav
     Some(value)
 }
 
-// Helper function to push onto stack 
+// Helper function to push traverse info onto stack 
 fn traverse_fold_helper<'a, 's, K, V>(node: &'a Node<K, V>, level: u32,
                                     stack: &'s mut TraverseStack<'a, K, V>, traverse_type: TraverseType) {
     match traverse_type {

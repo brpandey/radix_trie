@@ -63,7 +63,7 @@ impl Default for NodeType {
     fn default() -> Self { NodeType::Inner }
 }
 
-// Define type which characterizes number of node outgoing edges
+// Define type which reflects outgoing edges number
 #[derive(Debug, PartialEq)]
 pub enum EdgeType {
     Single, // Exactly 1
@@ -221,9 +221,8 @@ impl<K, V> Node<K, V> {
             };
         }
 
-        // As we have finished iterating through, the prefix mark the node properly
-        // if a node is marked already as a Key Node, (indicating it was previously
-        // inserted), grab old value out and replace with new boxed node)
+        // With the iteration finished, a current node as a key node indicates
+        // it was previously inserted, hence grab old value and replace with new boxed_value
 
         let boxed_value = Box::new(value);
 
@@ -243,7 +242,8 @@ impl<K, V> Node<K, V> {
     }
 
     // Removes node from tree either by unmarking node as a key node, pruning trie or compressing nodes
-    // or a combination of both.  Relies on a generated delete plan for guidance
+    // or a combination of both.  Relies on a generated delete plan for guidance when making
+    // modifications to trie
     pub fn remove(&mut self, prefix: &[u8]) -> Option<V> {
         let mut current: &mut Node<K, V> = self;
         let mut item: Playback;

@@ -25,7 +25,7 @@ impl<K, V> Trie<K, V>
         self.root.as_ref().and_then(|n| n.search(token.as_ref()))
     }
 
-    // Insert's value into Trie along with a fragment of key if not already resident
+    // Inserts value into Trie along with a key fragment if not already resident
     pub fn insert<T>(&mut self, token: T, value: V) -> Option<V>
     where T: AsRef<[u8]>
     {
@@ -50,7 +50,7 @@ impl<K, V> Trie<K, V>
         self.root.as_ref().and_then(|n| longest_prefix(n, token.as_ref()))
     }
 
-    // Returns all keys whic share a common token prefix
+    // Returns all keys which share a common token prefix
     pub fn all_keys(&self, token: K) -> Option<Vec<Vec<u8>>>
     where K: AsRef<[u8]>
     {
@@ -97,7 +97,7 @@ impl<K, V> Default for Trie<K, V>
 }
 
 
-// top level iterator for Trie
+// Top level iterator for Trie
 pub struct Labels<'a, K, V> {
     inner: LabelsIter<'a, K, V>,
     size: usize,

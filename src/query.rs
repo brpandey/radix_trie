@@ -5,7 +5,7 @@ use crate::traverse::{TraverseItem, TraverseType, TraverseResult, traverse};
 use crate::macros::enum_extract;
 
 // Finds the longest path that corresponds to the prefix token, one that fully captures
-// the token or part of it and return it as an iterator
+// the token or part of it (should it not fully reside in trie) and return it as an iterator
 pub fn longest_prefix<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> Option<impl Iterator<Item = &'a u8>> { // Option<String> {
     let value: TraverseResult<K, V> =  traverse(node, prefix, TraverseType::FoldOrPartial)?;
     let mut stack = enum_extract!(value, TraverseResult::Stack);
@@ -50,7 +50,7 @@ pub fn longest_prefix<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> O
     result
 }
 
-// Find all prefix keys which have the common prefix
+// Find all prefix keys which have the same common prefix
 pub fn all_keys<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> Option<Vec<Vec<u8>>> {
     // Grab node where the prefix search ends
     let result: TraverseResult<K, V> = traverse(node, prefix, TraverseType::Search)?;
