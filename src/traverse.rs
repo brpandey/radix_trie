@@ -80,7 +80,7 @@ pub(crate) fn traverse_match<'a, 'b, K, V>(node: &'a Node<K, V>, token: &'b [u8]
         //common prefix index
         for (c1, c2) in token.iter().zip(next_node.label().unwrap().iter()) {
             if c1 == c2 {
-                index=index+1;
+                index += 1;
             } else {
                 break;
             }
@@ -91,14 +91,14 @@ pub(crate) fn traverse_match<'a, 'b, K, V>(node: &'a Node<K, V>, token: &'b [u8]
         let (_, token_suffix) = token.split_at(index);
 
         // No match case
-        if common.len() == 0 {
+        if common.is_empty() {
             return None
         }
 
         let leftover = SuffixType::new(edge_suffix, token_suffix);
         Some(KeyMatch::new(next_node, common, leftover, edge_key))
     } else {
-        return None
+        None
     }
 }
 
@@ -117,7 +117,7 @@ pub(crate) fn traverse<'a, 'b, K, V>(node: &'a Node<K, V>, token: &'b [u8], trav
     // hence the end node's data is on top when loop is finished
 
     stack.push(TraverseItem{
-        node: current, next_key: Default::default(), label: None, level: level,
+        node: current, next_key: Default::default(), label: None, level,
     });
 
     loop {

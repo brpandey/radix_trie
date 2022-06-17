@@ -50,7 +50,7 @@ impl<'a, K: 'a, V: 'a> NodeDFSIter<'a, K, V> {
         if let Some(n) = iter.next() {
             self.current = Some(IterType::Item(n));
             // Peek to ensure another element available in order to push
-            if let Some(_) = iter.peek() {
+            if iter.peek().is_some() {
                 self.unvisited.push(IterType::Iter(iter))
             }
         }

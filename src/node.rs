@@ -110,10 +110,12 @@ impl<K, V> Node<K, V> {
         self.edges.values()
     }
 
+    #[allow(clippy::borrowed_box)]
     pub(crate) fn lookup_edge(&self, first: u8) -> Option<&Box<Node<K, V>>> {
         self.edges.get(&first)
     }
 
+    #[allow(clippy::borrowed_box)]
     pub(crate) fn lookup_edge_mut(&mut self, first: u8) -> Option<&mut Box<Node<K, V>>> {
         self.edges.get_mut(&first)
     }
@@ -252,7 +254,7 @@ impl<K, V> Node<K, V> {
         let mut temp_box: Box<Node<K, V>>;
         let mut value: Option<V> = None;
 
-        let mut replay = capture(&current, prefix)?;
+        let mut replay = capture(current, prefix)?;
 
         // As long as replay plan isn't empty follow the plan
         while !replay.is_empty() {

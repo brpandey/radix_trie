@@ -30,8 +30,8 @@ pub fn longest_prefix<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> O
 
             // Ignore root label so start with 1
             prefixes = stack.drain(1..).fold(prefixes, |mut acc, TraverseItem{node: _, next_key: _, label, level: _}| {
-                if label.is_some() {
-                    acc.push(label.unwrap().iter());
+                if let Some(lab) = label {
+                    acc.push(lab.iter());
                     //acc.extend(label.unwrap().to_owned())
                 }
                 acc}
@@ -39,7 +39,7 @@ pub fn longest_prefix<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> O
 
             // Add in last label of key node
             prefixes.push(last_label.unwrap().iter());
-            let p = prefixes.into_iter().flat_map(|it| it);
+            let p = prefixes.into_iter().flatten();
             result = Some(p);
 
             //prefixes.extend(last_label.unwrap().to_owned());
@@ -51,7 +51,7 @@ pub fn longest_prefix<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> O
 }
 
 // Find all prefix keys which have the same common prefix
-pub fn all_keys<'a, 'b, K, V>(node: &'a Node<K, V>, prefix: &'b [u8]) -> Option<Vec<Vec<u8>>> {
+pub fn all_keys<K, V>(node: &Node<K, V>, prefix: &[u8]) -> Option<Vec<Vec<u8>>> {
     // Grab node where the prefix search ends
     let result: TraverseResult<K, V> = traverse(node, prefix, TraverseType::Search)?;
 

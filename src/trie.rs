@@ -108,7 +108,7 @@ impl<K, V> Trie<K, V> {
     pub fn iter(&self) -> Labels<'_, K, V> {
         Labels {
             inner: self.root.as_ref().map_or_else(
-                || LabelsIter::default(), |r| r.iter()
+                LabelsIter::default, |r| r.iter()
             ),
             size: self.size,
         }
