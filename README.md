@@ -9,5 +9,11 @@ Upon deletion handles a combination of unmarking, pruning, and compression
   <img src='images/insert.png' width='845' height='450'/> 
 </p>
 
+
+<p float="left">
+  <img src='images/rtrie.jpeg' width='500' height='850'/> 
+</p>
+
+
 Thanks!
 Bibek Pandey
