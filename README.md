@@ -11,7 +11,7 @@ Upon deletion handles a combination of unmarking, pruning, and compression
 
 
 <p float="left">
-  <img src='images/rtrie.png' width='500' height='850'/> 
+  <img src='images/rtrie.png' width='750' height='850'/> 
 </p>
 
 
