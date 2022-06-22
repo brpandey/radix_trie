@@ -364,12 +364,13 @@ impl<K, V> Node<K, V> {
     }
 }
 
+/*
 impl <'a, K, V> IntoIterator for &'a Node<K, V> {
     type Item = &'a [u8];
     type IntoIter = LabelsIter<'a, K, V>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.iter()
+        self.into_iter()
     }
 }
-
+*/
