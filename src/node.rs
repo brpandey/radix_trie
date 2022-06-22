@@ -85,15 +85,19 @@ impl<K, V> Node<K, V> {
         }
     }
 
+
     // Returns key fragment label associated with node
+    #[inline]
     pub(crate) fn label(&self) -> Option<&[u8]> {
         self.label.as_deref()
     }
 
+    #[inline]
     pub fn is_key(&self) -> bool {
         self.tag == NodeType::Key
     }
 
+    #[inline]
     pub(crate) fn edge_type(&self) -> Option<EdgeType> {
         match self.edges.len() {
             0 => None,
@@ -102,20 +106,24 @@ impl<K, V> Node<K, V> {
         }
     }
 
+    #[inline]
     pub(crate) fn edges_keys_iter(&self) -> NodeEdgesKeyIter<'_, K, V> {
         self.edges.keys()
     }
 
+    #[inline]
     pub(crate) fn edges_values_iter(&self) -> NodeEdgesValueIter<'_, K, V> {
         self.edges.values()
     }
 
     #[allow(clippy::borrowed_box)]
+    #[inline]
     pub(crate) fn lookup_edge(&self, first: u8) -> Option<&Box<Node<K, V>>> {
         self.edges.get(&first)
     }
 
     #[allow(clippy::borrowed_box)]
+    #[inline]
     pub(crate) fn lookup_edge_mut(&mut self, first: u8) -> Option<&mut Box<Node<K, V>>> {
         self.edges.get_mut(&first)
     }
@@ -152,7 +160,7 @@ impl<K, V> Node<K, V> {
         self.edges.get_mut(&byte_key).unwrap()
     }
 
-
+    #[inline]
     fn next_helper(&mut self, key: u8) -> Option<& '_ mut Node<K, V>> {
         self.lookup_edge_mut(key).map(|box_ref| &mut **box_ref)
     }
