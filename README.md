@@ -10,7 +10,9 @@ Upon deletion handles a combination of unmarking, pruning, and compression
 </p>
 
 
-<p float="left">
+Back of the envelope 
+
+<p float="center">
   <img src='images/rtrie.png' width='400' height='450'/> 
 </p>
 
