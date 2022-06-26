@@ -71,6 +71,7 @@ pub enum EdgeType {
 }
 
 pub type NodeEdgesValueIter<'a, K, V> = std::collections::hash_map::Values<'a, u8, Box<Node<K, V>>>;
+pub type NodeEdgesValueIterMut<'a, K, V> = std::collections::hash_map::ValuesMut<'a, u8, Box<Node<K, V>>>;
 pub type NodeEdgesKeyIter<'a, K, V> = std::collections::hash_map::Keys<'a, u8, Box<Node<K, V>>>;
 
 
@@ -85,12 +86,30 @@ impl<K, V> Node<K, V> {
         }
     }
 
-
-    // Returns key fragment label associated with node
+    // Returns ref to key fragment label associated with node
     #[inline]
     pub(crate) fn label(&self) -> Option<&[u8]> {
         self.label.as_deref()
     }
+
+    // Returns ref to value associated with node
+    #[inline]
+    pub(crate) fn value(&self) -> Option<&V> {
+        self.value.as_deref()
+    }
+
+    // Returns mut ref to value associated with node
+    #[inline]
+    pub(crate) fn value_mut(&mut self) -> Option<&mut V> {
+        self.value.as_deref_mut()
+    }
+
+    // Returns value associated with node
+    #[inline]
+    pub(crate) fn take_value(&mut self) -> Option<V> {
+        self.value.take().map(|b| *b)
+    }
+
 
     #[inline]
     pub fn is_key(&self) -> bool {
@@ -115,6 +134,12 @@ impl<K, V> Node<K, V> {
     pub(crate) fn edges_values_iter(&self) -> NodeEdgesValueIter<'_, K, V> {
         self.edges.values()
     }
+
+    #[inline]
+    pub(crate) fn edges_values_iter_mut(&mut self) -> NodeEdgesValueIterMut<'_, K, V> {
+        self.edges.values_mut()
+    }
+
 
     #[allow(clippy::borrowed_box)]
     #[inline]
@@ -362,12 +387,29 @@ impl<K, V> Node<K, V> {
     pub(crate) fn iter(&self) -> LabelsIter<'_, K, V> {
         LabelsIter::new(self)
     }
+/*
+    pub(crate) fn labels(&self) -> LabelsIter<'_, K, V> {
+        LabelsIter::new(self)
+    }
+
+    pub(crate) fn values(&self) -> ValuesIter<'_, K, V> {
+        ValuesIter::new(self)
+    }
+
+    pub(crate) fn values_mut(&self) -> ValuesIterMut<'_, K, V> {
+        ValuesIterMut::new(self)
+    }
+
+    pub(crate) fn into_iter(self) -> IntoIter<'_, K, V> {
+        IntoIter::new(self)
+    }
+*/
 }
 
 /*
 impl <'a, K, V> IntoIterator for &'a Node<K, V> {
     type Item = &'a [u8];
-    type IntoIter = LabelsIter<'a, K, V>;
+    type IntoIter = IntoIter<'a, K, V>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.into_iter()
