@@ -20,9 +20,9 @@ use crate::traverse::{TraverseType, TraverseResult, KeyMatch, SuffixType, traver
 #[derive(Clone, PartialEq, Eq)]
 pub struct Node<K, V> {
     label: Option<Vec<u8>>,
-    value: Option<Box<V>>,
+    pub(crate) value: Option<Box<V>>,
     tag: NodeType,
-    edges: HashMap<u8, Box<Node<K, V>>>,
+    pub(crate) edges: HashMap<u8, Box<Node<K, V>>>,
     key: PhantomData<fn() -> K>,  // from Empty Iterator
 }
 
@@ -100,12 +100,14 @@ impl<K, V> Node<K, V> {
 
     // Returns mut ref to value associated with node
     #[inline]
+    #[allow(dead_code)]
     pub(crate) fn value_mut(&mut self) -> Option<&mut V> {
         self.value.as_deref_mut()
     }
 
     // Returns value associated with node
     #[inline]
+    #[allow(dead_code)]
     pub(crate) fn take_value(&mut self) -> Option<V> {
         self.value.take().map(|b| *b)
     }
@@ -136,6 +138,7 @@ impl<K, V> Node<K, V> {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub(crate) fn edges_values_iter_mut(&mut self) -> NodeEdgesValueIterMut<'_, K, V> {
         self.edges.values_mut()
     }

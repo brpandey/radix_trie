@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::iter::Peekable;
 use crate::node::{Node, NodeEdgesValueIter, NodeEdgesValueIterMut};
 use crate::macros::enum_extract;
@@ -11,8 +13,8 @@ pub struct ValuesIter<'a, K, V>(NodeDFSIter<'a, K, V>);
 pub struct ValuesIterMut<'a, K, V>(NodeDFSIterMut<'a, K, V>);
 pub struct IntoIter<'a, K, V>(NodeDFSIterMut<'a, K, V>);
 
-type ItemsIter<'a, K, V> = Peekable<Box<NodeEdgesValueIter<'a, K, V>>>;
-type ItemsIterMut<'a, K, V> = Peekable<Box<NodeEdgesValueIterMut<'a, K, V>>>;
+type ItemsIter<'a, K, V> = Peekable<NodeEdgesValueIter<'a, K, V>>;
+type ItemsIterMut<'a, K, V> = Peekable<NodeEdgesValueIterMut<'a, K, V>>;
 
 
 #[derive(Copy, Clone, Debug)]
@@ -43,7 +45,6 @@ enum IterUnified<'a, K, V> {
     Iter(ItemsIter<'a, K, V>),
     ItemMut(&'a mut Node<K, V>),
     IterMut(ItemsIterMut<'a, K, V>),
-
 }
 
 /*-----------------------------------------------------------------------*/
@@ -102,7 +103,6 @@ impl<'a, K: 'a, V: 'a> NodeDFSIter<'a, K, V> {
         }
     }
 
-
     fn next(&mut self, itype: IterationType) -> Option<NextType<'a, V>> {
         let mut iter: ItemsIter<K, V>;
 
@@ -117,7 +117,7 @@ impl<'a, K: 'a, V: 'a> NodeDFSIter<'a, K, V> {
                 },
                 // Handle current if node item
                 Some(IterUnified::Item(n)) => {
-                    iter = Box::new(n.edges_values_iter()).peekable();
+                    iter = n.edges_values_iter().peekable();
                     self.add_iter(iter);
 
                     match itype {
@@ -128,7 +128,10 @@ impl<'a, K: 'a, V: 'a> NodeDFSIter<'a, K, V> {
                             }
                         },
                         IterationType::Values => {
-                            break Some(NextType::ValueRef(n.value()))
+                            // Only pass nodes that have values
+                            if n.value().is_some() {
+                                break Some(NextType::ValueRef(n.value()))
+                            }
                         },
                         _ => unreachable!()
                     }
@@ -141,7 +144,6 @@ impl<'a, K: 'a, V: 'a> NodeDFSIter<'a, K, V> {
             }
         }
     }
-
 }
 
 
@@ -155,9 +157,9 @@ impl<'a, K: 'a, V: 'a> NodeDFSIterMut<'a, K, V> {
             unvisited: Vec::new(),
         }
     }
-/*
+
     // Helper method to add an iter of nodes
-    fn add_iter(&'a mut self, mut iter: ItemsIterMut<'a, K, V>) {
+    fn add_iter(&mut self, mut iter: ItemsIterMut<'a, K, V>) {
         if let Some(n) = iter.next() {
             self.current = Some(IterUnified::ItemMut(n));
             // Peek to ensure another element available in order to push
@@ -167,13 +169,14 @@ impl<'a, K: 'a, V: 'a> NodeDFSIterMut<'a, K, V> {
         }
     }
 
-    fn next(&'a mut self, itype: IterationType) -> Option<NextType<'a, V>> {
-        let mut iter: ItemsIterMut<K, V>;
+    fn next(&mut self, itype: IterationType) -> Option<NextType<'a, V>> {
+        let iter: ItemsIterMut<K, V>;
 
         // Loop handles producing concrete next value
         // even if literal next type is node or node iter
         loop {
-            match self.current.take() {
+            let temp = self.current.take();
+            match temp {
                 // if stack empty switch to current
                 None => match self.unvisited.pop() {
                     Some(last) => self.current = Some(last),
@@ -181,15 +184,32 @@ impl<'a, K: 'a, V: 'a> NodeDFSIterMut<'a, K, V> {
                 },
                 // Handle current if node item
                 Some(IterUnified::ItemMut(n)) => {
-                    iter = Box::new(n.edges_values_iter_mut()).peekable();
+
+                    /*-------------------------------------------------------------------------------------------------*/
+                    //TODO
+                    //Can refactor the NodeDFSIter data structure
+                    //the fields: current, unvisited can be reducing down to a single stack field unvisted
+                    //since vector implements the Extend trait which takes an iterator as an argument to
+                    //extend the stack!
+
+                    // Hack for now, to get around borrow checker concerns about exclusive mutable access!
+                    // Had to mark node struct fields: "value" and "edges" as pub(crate)  -- not completely ideal
+                    // Borrow checker is smart enough to know that different struct fields can be re-borrowed (as mutable)
+                    // In that mutable access (a write) to one won't affect another
+                    /*-------------------------------------------------------------------------------------------------*/
+
+                    let edges = &mut n.edges;
+                    iter = edges.values_mut().peekable();
                     self.add_iter(iter);
+
+                    let v = &mut n.value;
 
                     match itype {
                         IterationType::ValuesMut => {
-                            break Some(NextType::ValueRefMut(n.value_mut()))
+                            break Some(NextType::ValueRefMut(v.as_deref_mut())) // n.value_mut()))
                         },
                         IterationType::ValuesOwned => {
-                            break Some(NextType::ValueOwned(n.take_value()))
+                            break Some(NextType::ValueOwned(v.take().map(|b| *b))) // n.take_value()))
                         },
                         _ => unreachable!()
                     }
@@ -202,8 +222,6 @@ impl<'a, K: 'a, V: 'a> NodeDFSIterMut<'a, K, V> {
             }
         }
     }
-
-    */
 }
 
 
@@ -278,7 +296,7 @@ impl<'a, K: 'a, V: 'a> Iterator for ValuesIter<'a, K, V> {
     }
 }
 
-/*
+
 impl<'a, K: 'a, V: 'a> Iterator for ValuesIterMut<'a, K, V> {
     type Item = &'a mut V;
     fn next(&mut self) -> Option<&'a mut V> {
@@ -287,6 +305,7 @@ impl<'a, K: 'a, V: 'a> Iterator for ValuesIterMut<'a, K, V> {
     }
 }
 
+
 impl<'a, K, V> Iterator for IntoIter<'_, K, V> {
     type Item = V;
     fn next(&mut self) -> Option<Self::Item> {
@@ -294,7 +313,7 @@ impl<'a, K, V> Iterator for IntoIter<'_, K, V> {
         result.and_then(|r| enum_extract!(r, NextType::ValueOwned))
     }
 }
-*/
+
 
 /*
 impl<'a, K: 'a, V: 'a> Iterator for NodeDFSIter<'a, K, V> {
