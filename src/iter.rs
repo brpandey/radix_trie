@@ -170,7 +170,7 @@ impl<'a, K: 'a, V: 'a> NodeDFSIterMut<'a, K, V> {
     }
 
     fn next(&mut self, itype: IterationType) -> Option<NextType<'a, V>> {
-        let iter: ItemsIterMut<K, V>;
+        let mut iter: ItemsIterMut<K, V>;
 
         // Loop handles producing concrete next value
         // even if literal next type is node or node iter
@@ -206,10 +206,14 @@ impl<'a, K: 'a, V: 'a> NodeDFSIterMut<'a, K, V> {
 
                     match itype {
                         IterationType::ValuesMut => {
-                            break Some(NextType::ValueRefMut(v.as_deref_mut())) // n.value_mut()))
+                            if v.is_some() {
+                                break Some(NextType::ValueRefMut(v.as_deref_mut())) // n.value_mut()))
+                            }
                         },
                         IterationType::ValuesOwned => {
-                            break Some(NextType::ValueOwned(v.take().map(|b| *b))) // n.take_value()))
+                            if v.is_some() {
+                                break Some(NextType::ValueOwned(v.take().map(|b| *b))) // n.take_value()))
+                            }
                         },
                         _ => unreachable!()
                     }
