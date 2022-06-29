@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
-use std::iter::Peekable;
-use crate::node::{Node, NodeEdgesValueIter, NodeEdgesValueIterMut};
+use crate::node::{Node};
 use crate::macros::enum_extract;
 
 // At this point, dfs is the basis for all iteration types
@@ -13,8 +12,8 @@ pub struct ValuesIter<'a, K, V>(NodeDFSIter<'a, K, V>);
 pub struct ValuesIterMut<'a, K, V>(NodeDFSIterMut<'a, K, V>);
 pub struct IntoIter<'a, K, V>(NodeDFSIterMut<'a, K, V>);
 
-type ItemsIter<'a, K, V> = Peekable<NodeEdgesValueIter<'a, K, V>>;
-type ItemsIterMut<'a, K, V> = Peekable<NodeEdgesValueIterMut<'a, K, V>>;
+//type ItemsIter<'a, K, V> = NodeEdgesValueIter<'a, K, V>;
+//type ItemsIterMut<'a, K, V> = NodeEdgesValueIterMut<'a, K, V>;
 
 
 #[derive(Copy, Clone, Debug)]
@@ -36,38 +35,33 @@ enum NextType<'a, V> {
 
 
 // Wraps variants into a single unified iteration enum type
-// Single type allows for iteration regardless if type is a Node ref or Iter type of Nodes
-// Note: Mut variants not included in a separate mut variants enum to decrease fragmentation
 
 #[derive(Debug)]
 enum IterUnified<'a, K, V> {
     Item(&'a Node<K, V>),
-    Iter(ItemsIter<'a, K, V>),
     ItemMut(&'a mut Node<K, V>),
-    IterMut(ItemsIterMut<'a, K, V>),
+//    Iter(ItemsIter<'a, K, V>),
+//    IterMut(ItemsIterMut<'a, K, V>),
 }
 
 /*-----------------------------------------------------------------------*/
 // Handles DFS iteration using a stack and top level element
 #[derive(Debug)]
 pub struct NodeDFSIter<'a, K, V> {
-    current: Option<IterUnified<'a, K, V>>,
-    unvisited: Vec<IterUnified<'a, K, V>>,
+    stack: Vec<IterUnified<'a, K, V>>,
 }
 
 // Handles DFS mut iteration using a stack and top level element
 #[derive(Debug)]
 pub struct NodeDFSIterMut<'a, K, V> {
-    current: Option<IterUnified<'a, K, V>>,
-    unvisited: Vec<IterUnified<'a, K, V>>,
+    stack: Vec<IterUnified<'a, K, V>>,
 }
 
 
 impl<'a, K: 'a, V: 'a> Default for NodeDFSIter<'a, K, V> {
     fn default() -> Self {
         NodeDFSIter {
-            current: None,
-            unvisited: vec![],
+            stack: vec![],
         }
     }
 }
@@ -75,50 +69,30 @@ impl<'a, K: 'a, V: 'a> Default for NodeDFSIter<'a, K, V> {
 impl<'a, K: 'a, V: 'a> Default for NodeDFSIterMut<'a, K, V> {
     fn default() -> Self {
         NodeDFSIterMut {
-            current: None,
-            unvisited: vec![],
+            stack: vec![],
         }
     }
 }
 
-/*-----------------------------------------------------------------------*/
+//-----------------------------------------------------------------------
 // NodeDFSIter methods
 
 impl<'a, K: 'a, V: 'a> NodeDFSIter<'a, K, V> {
+
     pub fn new(node: &'a Node<K, V>) -> NodeDFSIter<'a, K, V> {
         NodeDFSIter {
-            current: Some(IterUnified::Item(node)),
-            unvisited: Vec::new(),
+            stack: vec![IterUnified::Item(node)],
         }
     }
 
-    // Helper method to add an iter of nodes
-    fn add_iter(&mut self, mut iter: ItemsIter<'a, K, V>) {
-        if let Some(n) = iter.next() {
-            self.current = Some(IterUnified::Item(n));
-            // Peek to ensure another element available in order to push
-            if iter.peek().is_some() {
-                self.unvisited.push(IterUnified::Iter(iter))
-            }
-        }
-    }
-
+    // Next method leverages vector's extend trait implementation to add an entire iteration
+    // of outgoing edge nodes instead of having to handle the case of specific item or iter
     fn next(&mut self, itype: IterationType) -> Option<NextType<'a, V>> {
-        let mut iter: ItemsIter<K, V>;
-
-        // Loop handles producing concrete next value
-        // even if literal next type is node or node iter
         loop {
-            match self.current.take() {
-                // if stack empty switch to current
-                None => match self.unvisited.pop() {
-                    Some(last) => self.current = Some(last),
-                    None => break None,
-                },
-                // Handle current if node item
+            match self.stack.pop() {
+                None => break None,
                 Some(IterUnified::Item(n)) => {
-                    iter = n.edges_values_iter().peekable();
-                    self.add_iter(iter);
+                    self.stack.extend(n.edges_values_iter().map(|b| IterUnified::Item(&*b)));
 
                     match itype {
                         IterationType::Labels => {
@@ -136,10 +110,6 @@ impl<'a, K: 'a, V: 'a> NodeDFSIter<'a, K, V> {
                         _ => unreachable!()
                     }
                 },
-                // Handle current if node iter
-                Some(IterUnified::Iter(iter)) => {
-                    self.add_iter(iter)
-                },
                 _ => unreachable!()
             }
         }
@@ -153,45 +123,20 @@ impl<'a, K: 'a, V: 'a> NodeDFSIter<'a, K, V> {
 impl<'a, K: 'a, V: 'a> NodeDFSIterMut<'a, K, V> {
     pub fn new(node: &'a mut Node<K, V>) -> NodeDFSIterMut<'a, K, V> {
         NodeDFSIterMut {
-            current: Some(IterUnified::ItemMut(node)),
-            unvisited: Vec::new(),
+            stack: vec![IterUnified::ItemMut(node)],
         }
     }
 
-    // Helper method to add an iter of nodes
-    fn add_iter(&mut self, mut iter: ItemsIterMut<'a, K, V>) {
-        if let Some(n) = iter.next() {
-            self.current = Some(IterUnified::ItemMut(n));
-            // Peek to ensure another element available in order to push
-            if iter.peek().is_some() {
-                self.unvisited.push(IterUnified::IterMut(iter))
-            }
-        }
-    }
-
+    // Next method leverages vector's extend trait implementation to add an entire iteration
+    // of outgoing edge nodes instead of having to handle the case of specific item or iter
     fn next(&mut self, itype: IterationType) -> Option<NextType<'a, V>> {
-        let mut iter: ItemsIterMut<K, V>;
-
-        // Loop handles producing concrete next value
-        // even if literal next type is node or node iter
         loop {
-            let temp = self.current.take();
-            match temp {
-                // if stack empty switch to current
-                None => match self.unvisited.pop() {
-                    Some(last) => self.current = Some(last),
-                    None => break None,
-                },
-                // Handle current if node item
+            match self.stack.pop() {
+                None => break None,
                 Some(IterUnified::ItemMut(n)) => {
 
                     /*-------------------------------------------------------------------------------------------------*/
                     //TODO
-                    //Can refactor the NodeDFSIter data structure
-                    //the fields: current, unvisited can be reducing down to a single stack field unvisted
-                    //since vector implements the Extend trait which takes an iterator as an argument to
-                    //extend the stack!
-
                     // Hack for now, to get around borrow checker concerns about exclusive mutable access!
                     // Had to mark node struct fields: "value" and "edges" as pub(crate)  -- not completely ideal
                     // Borrow checker is smart enough to know that different struct fields can be re-borrowed (as mutable)
@@ -199,8 +144,7 @@ impl<'a, K: 'a, V: 'a> NodeDFSIterMut<'a, K, V> {
                     /*-------------------------------------------------------------------------------------------------*/
 
                     let edges = &mut n.edges;
-                    iter = edges.values_mut().peekable();
-                    self.add_iter(iter);
+                    self.stack.extend(edges.values_mut().map(|b| IterUnified::ItemMut(&mut *b)));
 
                     let v = &mut n.value;
 
@@ -217,10 +161,6 @@ impl<'a, K: 'a, V: 'a> NodeDFSIterMut<'a, K, V> {
                         },
                         _ => unreachable!()
                     }
-                },
-                // Handle current if node iter mut
-                Some(IterUnified::IterMut(iter)) => {
-                    self.add_iter(iter)
                 },
                 _ => unreachable!()
             }
@@ -320,6 +260,8 @@ impl<'a, K, V> Iterator for IntoIter<'_, K, V> {
 
 
 /*
+// Original next implementation before using Extend trait
+
 impl<'a, K: 'a, V: 'a> Iterator for NodeDFSIter<'a, K, V> {
     type Item = &'a [u8];
     fn next(&mut self) -> Option<Self::Item> {
