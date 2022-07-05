@@ -180,7 +180,7 @@ mod tests {
         }
     }
 
-    fn labels_helper<'a, K: 'a, V: 'a>(labels: Labels<'a, K, V>) -> BTreeSet<&'a str> {
+    fn labels_helper<'a, K: 'a, V: 'a>(labels: LabelsIter<'a, K, V>) -> BTreeSet<&'a str> {
         labels.map(|bytes| std::str::from_utf8(bytes).unwrap()).collect::<BTreeSet<&str>>()
     }
 
