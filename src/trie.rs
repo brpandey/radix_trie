@@ -92,6 +92,8 @@ impl<K, V> Default for Trie<K, V> {
     }
 }
 
+// Define iterator methods
+
 impl<K, V> Trie<K, V> {
     // General reference iterator over all elements in the trie
     pub fn iter(&self) -> ValuesIter<'_, K, V> {
@@ -115,11 +117,6 @@ impl<K, V> Trie<K, V> {
         self.root.as_ref().map_or_else(
             ValuesIter::default, |r| r.values(self.size)
         )
-
-//        match self.root {
-//            Some(ref node) => ValuesIter::new(node, self.size),
-//            None => ValuesIter::default(),
-//        }
     }
 
     // Iterate through all trie's values mutably
@@ -127,11 +124,6 @@ impl<K, V> Trie<K, V> {
         self.root.as_mut().map_or_else(
             ValuesIterMut::default, |r| r.values_mut(self.size)
         )
-
-//        match self.root {
-//            Some(ref mut node) => ValuesIterMut::new(node, self.size),
-//            None => ValuesIterMut::default(),
-//        }
     }
 }
 
@@ -315,10 +307,7 @@ mod tests {
 
         assert_eq!(trie.remove("and").unwrap(), 77);
         assert_eq!(trie.all_keys("an"), None);
-
-
         assert_eq!(trie.remove("nonexistent2"), None);
-
         assert_eq!(trie.is_empty(), true);
     }
 
@@ -350,6 +339,25 @@ mod tests {
             trie.remove(k);
         }
     }
-  
+
+
+    #[test]
+    fn check_values_iter() {
+        let mut trie: Trie<_, _> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
+
+        let _ = trie.values_mut().map(|v| { *v = *v * 5; v } ).collect::<BTreeSet<&mut i32>>();
+        assert_eq!(5, trie.remove("anthem").unwrap());
+
+        let set2 = trie.values().collect::<BTreeSet<&i32>>();
+        assert_eq!(BTreeSet::from([&10, &35, &385]), set2)
+    }
+
+    #[test]
+    fn check_values_into_iter() {
+        let trie: Trie<_, _> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
+        let vec1 = trie.into_iter().map(|mut v| { v = v + 1; v } ).collect::<BTreeSet<i32>>();
+        assert_eq!(vec1, BTreeSet::from([2, 3, 8, 78]));
+    }
+
 }
 
