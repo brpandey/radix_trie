@@ -3,7 +3,7 @@ use std::borrow::Cow;
 
 use crate::node::Node;
 use crate::query::{longest_prefix, all_keys};
-use crate::iter::LabelsIter;
+use crate::iter::{LabelsIter, ValuesIter, ValuesIterMut, IntoIter};
 
 #[derive(Debug)]
 pub struct Trie<K, V> {
@@ -80,57 +80,71 @@ impl<K, V> Trie<K, V>
         result
     }
 
-
     #[allow(dead_code)]
     pub(crate) fn root(&self) -> Option<&Node<K, V>> {
         self.root.as_ref()
     }
-
 }
 
-
-impl<K, V> Default for Trie<K, V>
-{
+impl<K, V> Default for Trie<K, V> {
     fn default() -> Trie<K, V> {
         Trie::new()
     }
 }
 
-
-// Top level iterator for Trie
-pub struct Labels<'a, K, V> {
-    inner: LabelsIter<'a, K, V>,
-    size: usize,
-}
-
-
 impl<K, V> Trie<K, V> {
-    pub fn iter(&self) -> Labels<'_, K, V> {
-        Labels {
-            inner: self.root.as_ref().map_or_else(
-                LabelsIter::default, |r| r.iter()
-            ),
-            size: self.size,
-        }
+    // General reference iterator over all elements in the trie
+    pub fn iter(&self) -> ValuesIter<'_, K, V> {
+        self.values()
+    }
+
+    // General mut reference iterator over all elements in the trie
+    pub fn iter_mut(&mut self) -> ValuesIterMut<'_, K, V> {
+        self.values_mut()
+    }
+
+    // Iterate through trie's labels
+    pub fn labels(&self) -> LabelsIter<'_, K, V> {
+        self.root.as_ref().map_or_else(
+            LabelsIter::default, |r| r.labels(self.size)
+        )
+    }
+
+    // Iterate through all trie's values
+    pub fn values(&self) -> ValuesIter<'_, K, V> {
+        self.root.as_ref().map_or_else(
+            ValuesIter::default, |r| r.values(self.size)
+        )
+
+//        match self.root {
+//            Some(ref node) => ValuesIter::new(node, self.size),
+//            None => ValuesIter::default(),
+//        }
+    }
+
+    // Iterate through all trie's values mutably
+    pub fn values_mut(&mut self) -> ValuesIterMut<'_, K, V> {
+        self.root.as_mut().map_or_else(
+            ValuesIterMut::default, |r| r.values_mut(self.size)
+        )
+
+//        match self.root {
+//            Some(ref mut node) => ValuesIterMut::new(node, self.size),
+//            None => ValuesIterMut::default(),
+//        }
     }
 }
 
+impl<K, V> IntoIterator for Trie<K, V> {
+    type IntoIter = IntoIter<K, V>;
+    type Item = V;
 
-impl<'a, K: 'a, V: 'a> Iterator for Labels<'a, K, V> {
-    type Item = &'a [u8];
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+    fn into_iter(self) -> Self::IntoIter {
+        self.root.map_or_else(
+            IntoIter::default, Node::into_iter
+        )
     }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.size, Some(self.size))
-    }
-
 }
-
 
 impl<K, V> FromIterator<(K, V)> for Trie<K, V>
 where K: AsRef<[u8]>
@@ -269,7 +283,6 @@ mod tests {
     }
 
 
-
     #[test]
     fn delete_all() {
         let mut trie: Trie<_, _> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
@@ -279,13 +292,13 @@ mod tests {
 
         assert_eq!(vec!["and", "anthem", "anthemion", "anti"], result);
 
-//        print_labels(trie.iter());
+//        print_labels(trie.labels());
 
         // skip the first &str "and" then delete it after the loop 
         for (i, k) in result.iter().skip(1).enumerate() {
             trie.remove(k);
 
-//            print_labels(trie.iter());
+//            print_labels(trie.labels());
 
             let keys = trie.all_keys("an");
             let v: Vec<&str> = keys_helper(keys.as_ref());
@@ -322,7 +335,7 @@ mod tests {
         // skip the first &str "and" then delete it after the loop 
         for (i, k) in keys_vec.iter().enumerate() {
 
-            let set = labels_helper(trie.iter());
+            let set = labels_helper(trie.labels());
 
             // Through each delete iteration, check the labels of the trees
             // Since the deletion causes labels to be compressed/deleted expect number of labels to reduce

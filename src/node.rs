@@ -1,13 +1,11 @@
 use std::mem;
 use std::ops::Deref;
 use std::fmt;
-
 use std::borrow::Cow;
 use std::marker::PhantomData;
-
 use std::collections::{HashMap};
 
-use crate::iter::LabelsIter;
+use crate::iter::{LabelsIter, ValuesIter, ValuesIterMut, IntoIter};
 use crate::delete::{Playback, Cursor, capture};
 use crate::traverse::{TraverseType, TraverseResult, KeyMatch, SuffixType, traverse_match, traverse};
 
@@ -37,7 +35,6 @@ impl<K, V> Default for Node<K, V> {
         }
     }
 }
-
 
 impl<K, V> fmt::Debug for Node<K, V> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
@@ -200,12 +197,9 @@ impl<K, V> Node<K, V> {
     pub fn insert(&mut self, token: Cow<[u8]>, value: V) -> Option<V> {
         let mut current: &mut Node<K, V> = self;
         let mut temp_box: &mut Box<Node<K, V>>;
-
         let mut nav_token: &[u8] = token.deref();
-        let mut input_label: Cow<[u8]>;
 
-        let mut interior_label1: Cow<[u8]>;
-        let mut interior_label2: Cow<[u8]>;
+        let (mut input_label, mut interior_label1, mut interior_label2): (Cow<[u8]>, Cow<[u8]>, Cow<[u8]>);
 
         if token.is_empty() {
             return None
@@ -387,35 +381,37 @@ impl<K, V> Node<K, V> {
 }
 
 impl<K, V> Node<K, V> {
-    pub(crate) fn iter(&self) -> LabelsIter<'_, K, V> {
-        LabelsIter::new(self)
-    }
-/*
-    pub(crate) fn labels(&self) -> LabelsIter<'_, K, V> {
-        LabelsIter::new(self)
+    pub(crate) fn iter(&self, size: usize) -> ValuesIter<'_, K, V> {
+
+        // maybe this should indeed return an Iter
+        // where labels is the reference and value is the ref as well
+
+        ValuesIter::new(self, size)
     }
 
-    pub(crate) fn values(&self) -> ValuesIter<'_, K, V> {
-        ValuesIter::new(self)
+    pub(crate) fn iter_mut(&mut self, size: usize) -> ValuesIterMut<'_, K, V> {
+        ValuesIterMut::new(self, size)
     }
 
-    pub(crate) fn values_mut(&self) -> ValuesIterMut<'_, K, V> {
-        ValuesIterMut::new(self)
+    pub(crate) fn labels(&self, size: usize) -> LabelsIter<'_, K, V> {
+        LabelsIter::new(self, size)
     }
 
-    pub(crate) fn into_iter(self) -> IntoIter<'_, K, V> {
-        IntoIter::new(self)
+    pub(crate) fn values(&self, size: usize) -> ValuesIter<'_, K, V> {
+        ValuesIter::new(self, size)
     }
-*/
+
+    pub(crate) fn values_mut(&mut self, size: usize) -> ValuesIterMut<'_, K, V> {
+        ValuesIterMut::new(self, size)
+    }
 }
 
-/*
-impl <'a, K, V> IntoIterator for &'a Node<K, V> {
-    type Item = &'a [u8];
-    type IntoIter = IntoIter<'a, K, V>;
+impl <K, V> IntoIterator for Node<K, V> {
+    type Item = V;
+    type IntoIter = IntoIter<K, V>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.into_iter()
+        IntoIter::new(self)
     }
 }
-*/
+
