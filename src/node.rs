@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::collections::{HashMap};
 
-use crate::iter::{LabelsIter, ValuesIter, ValuesIterMut, IntoIter};
+use crate::iter::{LabelsIter, ValuesIter, ValuesIterMut, IntoIter, LeafPairsIter, LeafPairsIterMut};
 use crate::delete::{Playback, Cursor, capture};
 use crate::traverse::{TraverseType, TraverseResult, KeyMatch, SuffixType, traverse_match, traverse};
 
@@ -17,7 +17,7 @@ use crate::traverse::{TraverseType, TraverseResult, KeyMatch, SuffixType, traver
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Node<K, V> {
-    label: Option<Vec<u8>>,
+    pub(crate) label: Option<Vec<u8>>,
     pub(crate) value: Option<Box<V>>,
     tag: NodeType,
     pub(crate) edges: HashMap<u8, Box<Node<K, V>>>,
@@ -381,16 +381,12 @@ impl<K, V> Node<K, V> {
 }
 
 impl<K, V> Node<K, V> {
-    pub(crate) fn iter(&self, size: usize) -> ValuesIter<'_, K, V> {
-
-        // maybe this should indeed return an Iter
-        // where labels is the reference and value is the ref as well
-
-        ValuesIter::new(self, size)
+    pub(crate) fn iter(&self, size: usize) -> LeafPairsIter<'_, K, V> {
+        LeafPairsIter::new(self, size)
     }
 
-    pub(crate) fn iter_mut(&mut self, size: usize) -> ValuesIterMut<'_, K, V> {
-        ValuesIterMut::new(self, size)
+    pub(crate) fn iter_mut(&mut self, size: usize) -> LeafPairsIterMut<'_, K, V> {
+        LeafPairsIterMut::new(self, size)
     }
 
     pub(crate) fn labels(&self, size: usize) -> LabelsIter<'_, K, V> {

@@ -3,7 +3,7 @@ use std::borrow::Cow;
 
 use crate::node::Node;
 use crate::query::{longest_prefix, all_keys};
-use crate::iter::{LabelsIter, ValuesIter, ValuesIterMut, IntoIter};
+use crate::iter::{LabelsIter, ValuesIter, ValuesIterMut, IntoIter, LeafPairsIter, LeafPairsIterMut};
 
 #[derive(Debug)]
 pub struct Trie<K, V> {
@@ -96,13 +96,17 @@ impl<K, V> Default for Trie<K, V> {
 
 impl<K, V> Trie<K, V> {
     // General reference iterator over all elements in the trie
-    pub fn iter(&self) -> ValuesIter<'_, K, V> {
-        self.values()
+    pub fn iter(&self) -> LeafPairsIter<'_, K, V> {
+        self.root.as_ref().map_or_else(
+            LeafPairsIter::default, |r| r.iter(self.size)
+        )
     }
 
     // General mut reference iterator over all elements in the trie
-    pub fn iter_mut(&mut self) -> ValuesIterMut<'_, K, V> {
-        self.values_mut()
+    pub fn iter_mut(&mut self) -> LeafPairsIterMut<'_, K, V> {
+        self.root.as_mut().map_or_else(
+            LeafPairsIterMut::default, |r| r.iter_mut(self.size)
+        )
     }
 
     // Iterate through trie's labels
@@ -359,5 +363,11 @@ mod tests {
         assert_eq!(vec1, BTreeSet::from([2, 3, 8, 78]));
     }
 
+    #[test]
+    fn check_leafpairs_iter() {
+        let trie: Trie<_, _> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
+        let set = trie.iter().collect::<BTreeSet<(&[u8], &i32)>>();
+        assert_eq!(BTreeSet::from([("d".as_bytes(), &77), ("hem".as_bytes(), &1), ("i".as_bytes(), &2), ("ion".as_bytes(), &7)]), set)
+    }
 }
 

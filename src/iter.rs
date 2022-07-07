@@ -7,9 +7,22 @@ use crate::macros::enum_extract;
 // Iteration types are implemented as new types (kudos Haskell)
 // around a dfs ref nodes or ref mut nodes struct
 
+#[derive(Clone, Debug)]
 pub struct LabelsIter<'a, K, V> (NodeDFSIter<'a, K, V>);
+
+#[derive(Clone, Debug)]
 pub struct ValuesIter<'a, K, V>(NodeDFSIter<'a, K, V>);
+
+#[derive(Debug)]
 pub struct ValuesIterMut<'a, K, V>(NodeDFSIterMut<'a, K, V>);
+
+#[derive(Clone, Debug)]
+pub struct LeafPairsIter<'a, K, V> (NodeDFSIter<'a, K, V>);
+
+#[derive(Debug)]
+pub struct LeafPairsIterMut<'a, K, V> (NodeDFSIterMut<'a, K, V>);
+
+#[derive(Clone, Debug)]
 pub struct IntoIter<K, V>(NodeDFSIterOwned<K, V>);
 
 #[derive(Copy, Clone, Debug)]
@@ -17,6 +30,8 @@ enum IterationType {
     Labels,
     Values,
     ValuesMut,
+    LabelsValues,
+    LabelsValuesMut,
     ValuesOwned,
 }
 
@@ -27,21 +42,28 @@ enum NextType<'a, V> {
     ValueRef(Option<&'a V>),
     ValueRefMut(Option<&'a mut V>),
     ValueOwned(Option<V>),
+    LeafPairRef(Option<(&'a [u8], &'a V)>),
+    LeafPairRefMut(Option<(&'a [u8], &'a mut V)>),
 }
 
 
 // Wraps variants into a single unified iteration enum type
+// NOTE: These wrappers aren't entirely necessary now that the variants have been removed
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum IterUnified<'a, K, V> {
     Item(&'a Node<K, V>),
-    ItemMut(&'a mut Node<K, V>)
+}
+
+#[derive(Debug)]
+enum IterUnifiedMut<'a, K, V> {
+    ItemMut(&'a mut Node<K, V>),
 }
 
 
 /*-----------------------------------------------------------------------*/
 // Handles DFS iteration using a stack and total size
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct NodeDFSIter<'a, K, V> {
     stack: Vec<IterUnified<'a, K, V>>,
     size: usize,
@@ -50,12 +72,12 @@ pub struct NodeDFSIter<'a, K, V> {
 // Handles DFS mut iteration using a stack and total size
 #[derive(Debug)]
 pub struct NodeDFSIterMut<'a, K, V> {
-    stack: Vec<IterUnified<'a, K, V>>,
+    stack: Vec<IterUnifiedMut<'a, K, V>>,
     size: usize,
 }
 
 // Handles DFS iteration by value using a stack and total size
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct NodeDFSIterOwned<K, V> {
     stack: Vec<Node<K, V>>,
 }
@@ -120,10 +142,15 @@ impl<'a, K: 'a, V: 'a> NodeDFSIter<'a, K, V> {
                                 break Some(NextType::ValueRef(n.value()))
                             }
                         },
+                        IterationType::LabelsValues => {
+                            // Pass leaf nodes that have a label and a value
+                            if n.label().is_some() && n.value().is_some() {
+                                break Some(NextType::LeafPairRef(Some((n.label().unwrap(), n.value().unwrap()))))
+                            }
+                        },
                         _ => unreachable!()
                     }
                 },
-                _ => unreachable!()
             }
         }
     }
@@ -139,7 +166,7 @@ impl<'a, K: 'a, V: 'a> NodeDFSIter<'a, K, V> {
 impl<'a, K: 'a, V: 'a> NodeDFSIterMut<'a, K, V> {
     pub fn new(node: &'a mut Node<K, V>, size: usize) -> NodeDFSIterMut<'a, K, V> {
         NodeDFSIterMut {
-            stack: vec![IterUnified::ItemMut(node)],
+            stack: vec![IterUnifiedMut::ItemMut(node)],
             size,
         }
     }
@@ -150,7 +177,7 @@ impl<'a, K: 'a, V: 'a> NodeDFSIterMut<'a, K, V> {
         loop {
             match self.stack.pop() {
                 None => break None,
-                Some(IterUnified::ItemMut(n)) => {
+                Some(IterUnifiedMut::ItemMut(n)) => {
 
                     /*-------------------------------------------------------------------------------------------------*/
                     //TODO
@@ -161,9 +188,11 @@ impl<'a, K: 'a, V: 'a> NodeDFSIterMut<'a, K, V> {
                     /*-------------------------------------------------------------------------------------------------*/
 
                     let edges = &mut n.edges;
-                    self.stack.extend(edges.values_mut().map(|b| IterUnified::ItemMut(&mut *b)));
+
+                    self.stack.extend(edges.values_mut().map(|b| IterUnifiedMut::ItemMut(&mut *b)));
 
                     let v = &mut n.value;
+                    let label = n.label.as_deref();
 
                     match itype {
                         IterationType::ValuesMut => {
@@ -171,15 +200,16 @@ impl<'a, K: 'a, V: 'a> NodeDFSIterMut<'a, K, V> {
                                 break Some(NextType::ValueRefMut(v.as_deref_mut())) // n.value_mut()))
                             }
                         },
-//                        IterationType::ValuesOwned => {
-//                            if v.is_some() {
-//                                break Some(NextType::ValueOwned(v.take().map(|b| *b))) // n.take_value()))
-//                            }
-//                        },
+                        IterationType::LabelsValuesMut => {
+                            // Pass leaf nodes that have a label and a value
+                            // Supply both ref label, ref mut value
+                            if label.is_some() && v.is_some() {
+                                break Some(NextType::LeafPairRefMut(Some((label.unwrap(), v.as_deref_mut().unwrap()))))
+                            }
+                        },
                         _ => unreachable!()
                     }
                 },
-                _ => unreachable!()
             }
         }
     }
@@ -257,6 +287,18 @@ impl<'a, K: 'a, V: 'a> Default for ValuesIterMut<'a, K, V> {
     }
 }
 
+impl<'a, K: 'a, V: 'a> Default for LeafPairsIter<'a, K, V> {
+    fn default() -> Self {
+        LeafPairsIter(NodeDFSIter::default())
+    }
+}
+
+impl<'a, K: 'a, V: 'a> Default for LeafPairsIterMut<'a, K, V> {
+    fn default() -> Self {
+        LeafPairsIterMut(NodeDFSIterMut::default())
+    }
+}
+
 impl<K, V> Default for IntoIter<K, V> {
     fn default() -> Self {
         IntoIter(NodeDFSIterOwned::default())
@@ -283,6 +325,18 @@ impl<'a, K: 'a, V: 'a> ValuesIterMut<'a, K, V> {
     }
 }
 
+impl<'a, K: 'a, V: 'a> LeafPairsIter<'a, K, V> {
+    pub fn new(node: &'a Node<K, V>, size: usize) -> LeafPairsIter<'a, K, V> {
+        LeafPairsIter(NodeDFSIter::new(node, size))
+    }
+}
+
+impl<'a, K: 'a, V: 'a> LeafPairsIterMut<'a, K, V> {
+    pub fn new(node: &'a mut Node<K, V>, size: usize) -> LeafPairsIterMut<'a, K, V> {
+        LeafPairsIterMut(NodeDFSIterMut::new(node, size))
+    }
+}
+
 impl<K, V> IntoIter<K, V> {
     pub fn new(node: Node<K, V>) -> IntoIter<K, V> {
         IntoIter(NodeDFSIterOwned::new(node))
@@ -291,6 +345,7 @@ impl<K, V> IntoIter<K, V> {
 
 /*-----------------------------------------------------------------------*/
 // Iterator trait impl for custom iterator types which leverage base iterator
+
 impl<'a, K: 'a, V: 'a> Iterator for LabelsIter<'a, K, V> {
     type Item = &'a [u8];
     fn next(&mut self) -> Option<&'a [u8]> {
@@ -307,12 +362,27 @@ impl<'a, K: 'a, V: 'a> Iterator for ValuesIter<'a, K, V> {
     }
 }
 
-
 impl<'a, K: 'a, V: 'a> Iterator for ValuesIterMut<'a, K, V> {
     type Item = &'a mut V;
     fn next(&mut self) -> Option<&'a mut V> {
         let result = self.0.next(IterationType::ValuesMut);
         result.and_then(|r| enum_extract!(r, NextType::ValueRefMut))
+    }
+}
+
+impl<'a, K: 'a, V: 'a> Iterator for LeafPairsIter<'a, K, V> {
+    type Item = (&'a [u8], &'a V);
+    fn next(&mut self) -> Option<(&'a [u8], &'a V)> {
+        let result = self.0.next(IterationType::LabelsValues);
+        result.and_then(|r| enum_extract!(r, NextType::LeafPairRef))
+    }
+}
+
+impl<'a, K: 'a, V: 'a> Iterator for LeafPairsIterMut<'a, K, V> {
+    type Item = (&'a [u8], &'a mut V);
+    fn next(&mut self) -> Option<(&'a [u8], &'a mut V)> {
+        let result = self.0.next(IterationType::LabelsValuesMut);
+        result.and_then(|r| enum_extract!(r, NextType::LeafPairRefMut))
     }
 }
 
