@@ -8,22 +8,22 @@ use crate::macros::enum_extract;
 // around a dfs ref nodes or ref mut nodes struct
 
 #[derive(Clone, Debug)]
-pub struct LabelsIter<'a, K, V> (NodeDFSIter<'a, K, V>);
+pub struct LabelsIter<'a, K, V> (BaseIter<'a, K, V>);
 
 #[derive(Clone, Debug)]
-pub struct ValuesIter<'a, K, V>(NodeDFSIter<'a, K, V>);
+pub struct ValuesIter<'a, K, V>(BaseIter<'a, K, V>);
 
 #[derive(Debug)]
-pub struct ValuesIterMut<'a, K, V>(NodeDFSIterMut<'a, K, V>);
+pub struct ValuesIterMut<'a, K, V>(BaseIterMut<'a, K, V>);
 
 #[derive(Clone, Debug)]
-pub struct LeafPairsIter<'a, K, V> (NodeDFSIter<'a, K, V>);
+pub struct LeafPairsIter<'a, K, V> (BaseIter<'a, K, V>);
 
 #[derive(Debug)]
-pub struct LeafPairsIterMut<'a, K, V> (NodeDFSIterMut<'a, K, V>);
+pub struct LeafPairsIterMut<'a, K, V> (BaseIterMut<'a, K, V>);
 
 #[derive(Clone, Debug)]
-pub struct IntoIter<K, V>(NodeDFSIterOwned<K, V>);
+pub struct IntoIter<K, V>(BaseIterOwned<K, V>);
 
 #[derive(Copy, Clone, Debug)]
 enum IterationType {
@@ -64,57 +64,57 @@ enum IterUnifiedMut<'a, K, V> {
 /*-----------------------------------------------------------------------*/
 // Handles DFS iteration using a stack and total size
 #[derive(Clone, Debug)]
-pub struct NodeDFSIter<'a, K, V> {
+pub struct BaseIter<'a, K, V> {
     stack: Vec<IterUnified<'a, K, V>>,
     size: usize,
 }
 
 // Handles DFS mut iteration using a stack and total size
 #[derive(Debug)]
-pub struct NodeDFSIterMut<'a, K, V> {
+pub struct BaseIterMut<'a, K, V> {
     stack: Vec<IterUnifiedMut<'a, K, V>>,
     size: usize,
 }
 
 // Handles DFS iteration by value using a stack and total size
 #[derive(Clone, Debug)]
-pub struct NodeDFSIterOwned<K, V> {
+pub struct BaseIterOwned<K, V> {
     stack: Vec<Node<K, V>>,
 }
 
-impl<'a, K: 'a, V: 'a> Default for NodeDFSIter<'a, K, V> {
+impl<'a, K: 'a, V: 'a> Default for BaseIter<'a, K, V> {
     fn default() -> Self {
-        NodeDFSIter {
+        BaseIter {
             stack: vec![],
             size: 0,
         }
     }
 }
 
-impl<'a, K: 'a, V: 'a> Default for NodeDFSIterMut<'a, K, V> {
+impl<'a, K: 'a, V: 'a> Default for BaseIterMut<'a, K, V> {
     fn default() -> Self {
-        NodeDFSIterMut {
+        BaseIterMut {
             stack: vec![],
             size: 0,
         }
     }
 }
 
-impl<K, V> Default for NodeDFSIterOwned<K, V> {
+impl<K, V> Default for BaseIterOwned<K, V> {
     fn default() -> Self {
-        NodeDFSIterOwned {
+        BaseIterOwned {
             stack: vec![],
         }
     }
 }
 
 //-----------------------------------------------------------------------
-// NodeDFSIter methods
+// BaseIter methods
 
-impl<'a, K: 'a, V: 'a> NodeDFSIter<'a, K, V> {
+impl<'a, K: 'a, V: 'a> BaseIter<'a, K, V> {
 
-    pub fn new(node: &'a Node<K, V>, size: usize) -> NodeDFSIter<'a, K, V> {
-        NodeDFSIter {
+    pub fn new(node: &'a Node<K, V>, size: usize) -> BaseIter<'a, K, V> {
+        BaseIter {
             stack: vec![IterUnified::Item(node)],
             size,
         }
@@ -163,9 +163,9 @@ impl<'a, K: 'a, V: 'a> NodeDFSIter<'a, K, V> {
 
 /*-----------------------------------------------------------------------*/
 // Handle mut dfs iterations
-impl<'a, K: 'a, V: 'a> NodeDFSIterMut<'a, K, V> {
-    pub fn new(node: &'a mut Node<K, V>, size: usize) -> NodeDFSIterMut<'a, K, V> {
-        NodeDFSIterMut {
+impl<'a, K: 'a, V: 'a> BaseIterMut<'a, K, V> {
+    pub fn new(node: &'a mut Node<K, V>, size: usize) -> BaseIterMut<'a, K, V> {
+        BaseIterMut {
             stack: vec![IterUnifiedMut::ItemMut(node)],
             size,
         }
@@ -223,11 +223,11 @@ impl<'a, K: 'a, V: 'a> NodeDFSIterMut<'a, K, V> {
 
 
 //-----------------------------------------------------------------------
-// NodeDFSIter methods
+// BaseIter methods
 
-impl<K, V> NodeDFSIterOwned<K, V> {
-    pub fn new(node: Node<K, V>) -> NodeDFSIterOwned<K, V> {
-        NodeDFSIterOwned {
+impl<K, V> BaseIterOwned<K, V> {
+    pub fn new(node: Node<K, V>) -> BaseIterOwned<K, V> {
+        BaseIterOwned {
             stack: vec![node],
         }
     }
@@ -271,37 +271,37 @@ impl<K, V> NodeDFSIterOwned<K, V> {
 // Default trait implementations for custom iter types
 impl<'a, K: 'a, V: 'a> Default for LabelsIter<'a, K, V> {
     fn default() -> Self {
-        LabelsIter(NodeDFSIter::default())
+        LabelsIter(BaseIter::default())
     }
 }
 
 impl<'a, K: 'a, V: 'a> Default for ValuesIter<'a, K, V> {
     fn default() -> Self {
-        ValuesIter(NodeDFSIter::default())
+        ValuesIter(BaseIter::default())
     }
 }
 
 impl<'a, K: 'a, V: 'a> Default for ValuesIterMut<'a, K, V> {
     fn default() -> Self {
-        ValuesIterMut(NodeDFSIterMut::default())
+        ValuesIterMut(BaseIterMut::default())
     }
 }
 
 impl<'a, K: 'a, V: 'a> Default for LeafPairsIter<'a, K, V> {
     fn default() -> Self {
-        LeafPairsIter(NodeDFSIter::default())
+        LeafPairsIter(BaseIter::default())
     }
 }
 
 impl<'a, K: 'a, V: 'a> Default for LeafPairsIterMut<'a, K, V> {
     fn default() -> Self {
-        LeafPairsIterMut(NodeDFSIterMut::default())
+        LeafPairsIterMut(BaseIterMut::default())
     }
 }
 
 impl<K, V> Default for IntoIter<K, V> {
     fn default() -> Self {
-        IntoIter(NodeDFSIterOwned::default())
+        IntoIter(BaseIterOwned::default())
     }
 }
 
@@ -309,37 +309,37 @@ impl<K, V> Default for IntoIter<K, V> {
 // Implementations for custom iterator types which leverage base iterator
 impl<'a, K: 'a, V: 'a> LabelsIter<'a, K, V> {
     pub fn new(node: &'a Node<K, V>, size: usize) -> LabelsIter<'a, K, V> {
-        LabelsIter(NodeDFSIter::new(node, size))
+        LabelsIter(BaseIter::new(node, size))
     }
 }
 
 impl<'a, K: 'a, V: 'a> ValuesIter<'a, K, V> {
     pub fn new(node: &'a Node<K, V>, size: usize) -> ValuesIter<'a, K, V> {
-        ValuesIter(NodeDFSIter::new(node, size))
+        ValuesIter(BaseIter::new(node, size))
     }
 }
 
 impl<'a, K: 'a, V: 'a> ValuesIterMut<'a, K, V> {
     pub fn new(node: &'a mut Node<K, V>, size: usize) -> ValuesIterMut<'a, K, V> {
-        ValuesIterMut(NodeDFSIterMut::new(node, size))
+        ValuesIterMut(BaseIterMut::new(node, size))
     }
 }
 
 impl<'a, K: 'a, V: 'a> LeafPairsIter<'a, K, V> {
     pub fn new(node: &'a Node<K, V>, size: usize) -> LeafPairsIter<'a, K, V> {
-        LeafPairsIter(NodeDFSIter::new(node, size))
+        LeafPairsIter(BaseIter::new(node, size))
     }
 }
 
 impl<'a, K: 'a, V: 'a> LeafPairsIterMut<'a, K, V> {
     pub fn new(node: &'a mut Node<K, V>, size: usize) -> LeafPairsIterMut<'a, K, V> {
-        LeafPairsIterMut(NodeDFSIterMut::new(node, size))
+        LeafPairsIterMut(BaseIterMut::new(node, size))
     }
 }
 
 impl<K, V> IntoIter<K, V> {
     pub fn new(node: Node<K, V>) -> IntoIter<K, V> {
-        IntoIter(NodeDFSIterOwned::new(node))
+        IntoIter(BaseIterOwned::new(node))
     }
 }
 
@@ -398,7 +398,7 @@ impl<K, V> Iterator for IntoIter<K, V> {
 /*
 // Original next implementation before using Extend trait
 
-impl<'a, K: 'a, V: 'a> Iterator for NodeDFSIter<'a, K, V> {
+impl<'a, K: 'a, V: 'a> Iterator for BaseIter<'a, K, V> {
     type Item = &'a [u8];
     fn next(&mut self) -> Option<Self::Item> {
         let mut iter: ItemsIter<K, V>;
