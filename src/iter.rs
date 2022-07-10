@@ -1,14 +1,13 @@
 #![allow(dead_code)]
 
-use crate::node::{Node};
+use crate::node::Node;
 use crate::macros::enum_extract;
 
-// At this point, dfs is the basis for all iteration types
 // Iteration types are implemented as new types (kudos Haskell)
-// around a dfs ref nodes or ref mut nodes struct
+// around a base iter type
 
 #[derive(Clone, Debug)]
-pub struct LabelsIter<'a, K, V> (BaseIter<'a, K, V>);
+pub struct LabelsIter<'a, K, V>(BaseIter<'a, K, V>);
 
 #[derive(Clone, Debug)]
 pub struct ValuesIter<'a, K, V>(BaseIter<'a, K, V>);
@@ -17,10 +16,10 @@ pub struct ValuesIter<'a, K, V>(BaseIter<'a, K, V>);
 pub struct ValuesIterMut<'a, K, V>(BaseIterMut<'a, K, V>);
 
 #[derive(Clone, Debug)]
-pub struct LeafPairsIter<'a, K, V> (BaseIter<'a, K, V>);
+pub struct LeafPairsIter<'a, K, V>(BaseIter<'a, K, V>);
 
 #[derive(Debug)]
-pub struct LeafPairsIterMut<'a, K, V> (BaseIterMut<'a, K, V>);
+pub struct LeafPairsIterMut<'a, K, V>(BaseIterMut<'a, K, V>);
 
 #[derive(Clone, Debug)]
 pub struct IntoIter<K, V>(BaseIterOwned<K, V>);
@@ -46,33 +45,18 @@ enum NextType<'a, V> {
     LeafPairRefMut(Option<(&'a [u8], &'a mut V)>),
 }
 
-
-// Wraps variants into a single unified iteration enum type
-// NOTE: These wrappers aren't entirely necessary now that the variants have been removed
-
-#[derive(Clone, Debug)]
-enum IterUnified<'a, K, V> {
-    Item(&'a Node<K, V>),
-}
-
-#[derive(Debug)]
-enum IterUnifiedMut<'a, K, V> {
-    ItemMut(&'a mut Node<K, V>),
-}
-
-
 /*-----------------------------------------------------------------------*/
 // Handles DFS iteration using a stack and total size
 #[derive(Clone, Debug)]
 pub struct BaseIter<'a, K, V> {
-    stack: Vec<IterUnified<'a, K, V>>,
+    stack: Vec<&'a Node<K, V>>,
     size: usize,
 }
 
 // Handles DFS mut iteration using a stack and total size
 #[derive(Debug)]
 pub struct BaseIterMut<'a, K, V> {
-    stack: Vec<IterUnifiedMut<'a, K, V>>,
+    stack: Vec<&'a mut Node<K, V>>,
     size: usize,
 }
 
@@ -112,10 +96,9 @@ impl<K, V> Default for BaseIterOwned<K, V> {
 // BaseIter methods
 
 impl<'a, K: 'a, V: 'a> BaseIter<'a, K, V> {
-
     pub fn new(node: &'a Node<K, V>, size: usize) -> BaseIter<'a, K, V> {
         BaseIter {
-            stack: vec![IterUnified::Item(node)],
+            stack: vec![node],
             size,
         }
     }
@@ -126,26 +109,27 @@ impl<'a, K: 'a, V: 'a> BaseIter<'a, K, V> {
         loop {
             match self.stack.pop() {
                 None => break None,
-                Some(IterUnified::Item(n)) => {
-                    self.stack.extend(n.edges_values_iter().map(|b| IterUnified::Item(&*b)));
+                Some(n) => {
+                    let view = n.node_view();
+                    self.stack.extend(view.edges.map(|b| &**b));
 
                     match itype {
                         IterationType::Labels => {
                             // Don't add root label which is none
-                            if n.label().is_some() {
-                                break Some(NextType::LabelRef(n.label()))
+                            if view.label.is_some() {
+                                break Some(NextType::LabelRef(view.label))
                             }
                         },
                         IterationType::Values => {
-                            // Only pass nodes that have values
-                            if n.value().is_some() {
-                                break Some(NextType::ValueRef(n.value()))
+                            // Only pass data that have actual value
+                            if view.value.is_some() {
+                                break Some(NextType::ValueRef(view.value))
                             }
                         },
                         IterationType::LabelsValues => {
-                            // Pass leaf nodes that have a label and a value
-                            if n.label().is_some() && n.value().is_some() {
-                                break Some(NextType::LeafPairRef(Some((n.label().unwrap(), n.value().unwrap()))))
+                            // Pass leaf data that has a label and a value
+                            if view.label.is_some() && view.value.is_some() {
+                                break Some(NextType::LeafPairRef(Some((view.label.unwrap(), view.value.unwrap()))))
                             }
                         },
                         _ => unreachable!()
@@ -166,7 +150,7 @@ impl<'a, K: 'a, V: 'a> BaseIter<'a, K, V> {
 impl<'a, K: 'a, V: 'a> BaseIterMut<'a, K, V> {
     pub fn new(node: &'a mut Node<K, V>, size: usize) -> BaseIterMut<'a, K, V> {
         BaseIterMut {
-            stack: vec![IterUnifiedMut::ItemMut(node)],
+            stack: vec![node],
             size,
         }
     }
@@ -177,34 +161,22 @@ impl<'a, K: 'a, V: 'a> BaseIterMut<'a, K, V> {
         loop {
             match self.stack.pop() {
                 None => break None,
-                Some(IterUnifiedMut::ItemMut(n)) => {
-
-                    /*-------------------------------------------------------------------------------------------------*/
-                    //TODO
-                    // Hack for now, to get around borrow checker concerns about exclusive mutable access!
-                    // Had to mark node struct fields: "value" and "edges" as pub(crate)  -- not completely ideal
-                    // Borrow checker is smart enough to know that different struct fields can be re-borrowed (as mutable)
-                    // In that mutable access (a write) to one won't affect another
-                    /*-------------------------------------------------------------------------------------------------*/
-
-                    let edges = &mut n.edges;
-
-                    self.stack.extend(edges.values_mut().map(|b| IterUnifiedMut::ItemMut(&mut *b)));
-
-                    let v = &mut n.value;
-                    let label = n.label.as_deref();
+                Some(n) => {
+                    // Mutable view type w/ accesible fields avoids concerns about exclusive mutable access to node
+                    let view_mut = n.node_view_mut();
+                    self.stack.extend(view_mut.edges.map(|b| &mut **b));
 
                     match itype {
                         IterationType::ValuesMut => {
-                            if v.is_some() {
-                                break Some(NextType::ValueRefMut(v.as_deref_mut())) // n.value_mut()))
+                            if view_mut.value.is_some() {
+                                break Some(NextType::ValueRefMut(view_mut.value))
                             }
                         },
                         IterationType::LabelsValuesMut => {
-                            // Pass leaf nodes that have a label and a value
+                            // Pass leaf data that has a label and a value
                             // Supply both ref label, ref mut value
-                            if label.is_some() && v.is_some() {
-                                break Some(NextType::LeafPairRefMut(Some((label.unwrap(), v.as_deref_mut().unwrap()))))
+                            if view_mut.label.is_some() && view_mut.value.is_some() {
+                                break Some(NextType::LeafPairRefMut(Some((view_mut.label.unwrap(), view_mut.value.unwrap()))))
                             }
                         },
                         _ => unreachable!()
@@ -238,24 +210,14 @@ impl<K, V> BaseIterOwned<K, V> {
         loop {
             match self.stack.pop() {
                 None => break None,
-                Some(mut n) => {
-
-                    /*-------------------------------------------------------------------------------------------------*/
-                    //TODO
-                    // Hack for now, to get around borrow checker concerns about exclusive mutable access!
-                    // Had to mark node struct fields: "value" and "edges" as pub(crate)  -- not completely ideal
-                    // Borrow checker is smart enough to know that different struct fields can be re-borrowed (as mutable)
-                    // In that mutable access (a write) to one won't affect another
-                    /*-------------------------------------------------------------------------------------------------*/
-
-//                    let edges = &mut n.edges;
-                    self.stack.extend(n.edges.into_values().map(|b| *b));
-                    let v = &mut n.value;
+                Some(n) => {
+                    let view_owned = n.node_view_owned();
+                    self.stack.extend(view_owned.edges.map(|b| *b));
 
                     match itype {
                         IterationType::ValuesOwned => {
-                            if v.is_some() {
-                                break Some(NextType::ValueOwned(v.take().map(|b| *b))) // n.take_value()))
+                            if view_owned.value.is_some() {
+                                break Some(NextType::ValueOwned(view_owned.value))
                             }
                         },
                         _ => unreachable!()
@@ -393,43 +355,3 @@ impl<K, V> Iterator for IntoIter<K, V> {
         result.and_then(|r| enum_extract!(r, NextType::ValueOwned))
     }
 }
-
-
-/*
-// Original next implementation before using Extend trait
-
-impl<'a, K: 'a, V: 'a> Iterator for BaseIter<'a, K, V> {
-    type Item = &'a [u8];
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut iter: ItemsIter<K, V>;
-
-        // Loop handles producing concrete next value
-        // even if literal next type is node or node iter
-        loop {
-            match self.current.take() {
-                // if stack empty switch to current
-                None => match self.unvisited.pop() {
-                    Some(last) => self.current = Some(last),
-                    None => break None,
-                },
-                // Handle current if node item
-                Some(IterUnified::Item(n)) => {
-                    iter = Box::new(n.edges_values_iter()).peekable();
-                    self.add_iter(iter);
-
-                    // Don't add root label
-                    if n.label().is_some() {
-                        break n.label()
-                    }
-                },
-                // Handle current if node iter
-                Some(IterUnified::Iter(iter)) => {
-                    self.add_iter(iter)
-                }
-            }
-        }
-    }
-}
-
-*/
-

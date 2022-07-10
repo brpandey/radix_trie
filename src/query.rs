@@ -92,7 +92,9 @@ pub fn all_keys<K, V>(node: &Node<K, V>, prefix: &[u8]) -> Option<Vec<Vec<u8>>> 
     while !backlog.is_empty() {
         let (current, bytes) = backlog.pop_front().unwrap();
 
-        for boxed_child_node_ref in current.edges_values_iter() {
+        let view = current.node_view();
+
+        for boxed_child_node_ref in view.edges {
             child = &**boxed_child_node_ref;
 
             // Since bytes is being accessed by other node child siblings, clone it

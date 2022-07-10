@@ -80,7 +80,8 @@ pub fn capture<K, V>(current: &Node<K, V>, prefix: &[u8]) -> Option<DeletePlan> 
                 Some(EdgeType::Single) => {
                     // Store key (temporarily) that will be used as the merge key / merge node
                     // when we merge the passthrough node's label with the merge node
-                    let merge_key = node.edges_keys_iter().copied().collect::<Vec<u8>>().pop().unwrap();
+                    let view = node.node_view();
+                    let merge_key = view.keys.copied().collect::<Vec<u8>>().pop().unwrap();
 
                     let item = Playback::MergeTemp(merge_key);
                     replay.push(item);
@@ -138,7 +139,8 @@ pub fn capture<K, V>(current: &Node<K, V>, prefix: &[u8]) -> Option<DeletePlan> 
 
                 // Record key that will be used as the merge key / merge node
                 // when we merge the passthrough node's label with the merge node
-                let mut set = node.edges_keys_iter().collect::<HashSet<_>>();
+                let view = node.node_view();
+                let mut set = view.keys.collect::<HashSet<_>>();
                 set.remove(&next_key);
                 let merge_key = set.into_iter().copied().collect::<Vec<u8>>().pop().unwrap();
 

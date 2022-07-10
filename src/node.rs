@@ -3,26 +3,52 @@ use std::ops::Deref;
 use std::fmt;
 use std::borrow::Cow;
 use std::marker::PhantomData;
-use std::collections::{HashMap};
+use std::collections::{HashMap, hash_map::{Keys, Values, ValuesMut, IntoValues}};
 
-use crate::iter::{LabelsIter, ValuesIter, ValuesIterMut, IntoIter, LeafPairsIter, LeafPairsIterMut};
 use crate::delete::{Playback, Cursor, capture};
+use crate::iter::{LabelsIter, ValuesIter, ValuesIterMut, IntoIter, LeafPairsIter, LeafPairsIterMut};
 use crate::traverse::{TraverseType, TraverseResult, KeyMatch, SuffixType, traverse_match, traverse};
 
 
-// Since generics and traits work hand in hand and we want to use the trait AsRef<[u8]>
-// for our Trie, since we don't actually store a key type K in the node but instead a Vec<u8>, we
-// simulate that we store a K with the zero-sized unused field key as a PhantomData type
+// A key is not actually stored in the Trie but instead a Vec<u8>
+// The trie is accessed via anything the implements the trait AsRef<[u8]>
+// To link the traits and generics involved, K is in fact a zero-sized PhantomData type
 // To prevent the unused K from affecting the drop check anaylsis it is wrapped in an fn() (just like Empty Iterator)
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Node<K, V> {
-    pub(crate) label: Option<Vec<u8>>,
-    pub(crate) value: Option<Box<V>>,
+    label: Option<Vec<u8>>,
+    value: Option<Box<V>>,
     tag: NodeType,
-    pub(crate) edges: HashMap<u8, Box<Node<K, V>>>,
+    edges: HashMap<u8, Box<Node<K, V>>>,
     key: PhantomData<fn() -> K>,  // from Empty Iterator
 }
+
+/*-----------------------------------------------------------------------------*/
+// Auxiliary data structures that provide views into Node mainly used by Iter,
+// generated when necessary
+
+pub struct NodeView<'a, K, V> {
+    pub(crate) label: Option<&'a [u8]>,
+    pub(crate) value: Option<&'a V>,
+    pub(crate) edges: Values<'a, u8, Box<Node<K, V>>>,
+    pub(crate) keys: Keys<'a, u8, Box<Node<K, V>>>,
+}
+
+// Borrow checker is smart enough to know that different struct fields can be re-borrowed (as mutable)
+// In that mutable access (a write) to one won't affect another
+pub struct NodeViewMut<'a, K, V> {
+    pub(crate) label: Option<&'a [u8]>, // not allowed to modify label - just a shared ref
+    pub(crate) value: Option<&'a mut V>,
+    pub(crate) edges: ValuesMut<'a, u8, Box<Node<K, V>>>,
+}
+
+pub struct NodeViewOwned<K, V> {
+    pub(crate) value: Option<V>,
+    pub(crate) edges: IntoValues<u8, Box<Node<K, V>>>
+}
+
+/*-----------------------------------------------------------------------------*/
 
 impl<K, V> Default for Node<K, V> {
     fn default() -> Self {
@@ -67,11 +93,6 @@ pub enum EdgeType {
     Branching(usize),  // 2 or more
 }
 
-pub type NodeEdgesValueIter<'a, K, V> = std::collections::hash_map::Values<'a, u8, Box<Node<K, V>>>;
-pub type NodeEdgesValueIterMut<'a, K, V> = std::collections::hash_map::ValuesMut<'a, u8, Box<Node<K, V>>>;
-pub type NodeEdgesKeyIter<'a, K, V> = std::collections::hash_map::Keys<'a, u8, Box<Node<K, V>>>;
-
-
 impl<K, V> Node<K, V> {
     pub fn new(label: Option<Vec<u8>>, tag: NodeType, value: Option<Box<V>>) -> Self {
         Node {
@@ -83,32 +104,12 @@ impl<K, V> Node<K, V> {
         }
     }
 
+
     // Returns ref to key fragment label associated with node
     #[inline]
     pub(crate) fn label(&self) -> Option<&[u8]> {
         self.label.as_deref()
     }
-
-    // Returns ref to value associated with node
-    #[inline]
-    pub(crate) fn value(&self) -> Option<&V> {
-        self.value.as_deref()
-    }
-
-    // Returns mut ref to value associated with node
-    #[inline]
-    #[allow(dead_code)]
-    pub(crate) fn value_mut(&mut self) -> Option<&mut V> {
-        self.value.as_deref_mut()
-    }
-
-    // Returns value associated with node
-    #[inline]
-    #[allow(dead_code)]
-    pub(crate) fn take_value(&mut self) -> Option<V> {
-        self.value.take().map(|b| *b)
-    }
-
 
     #[inline]
     pub fn is_key(&self) -> bool {
@@ -124,22 +125,34 @@ impl<K, V> Node<K, V> {
         }
     }
 
-    #[inline]
-    pub(crate) fn edges_keys_iter(&self) -> NodeEdgesKeyIter<'_, K, V> {
-        self.edges.keys()
+    /*-----------------------------------------------------------------------------*/
+    // Instead of using multiple getter and setters we have use view structs
+    // to assist when we need to read or modify node iter related functionality
+    pub(crate) fn node_view(&self) -> NodeView<'_, K, V> {
+        NodeView {
+            label: self.label.as_deref(),
+            value: self.value.as_deref(),
+            edges: self.edges.values(),
+            keys: self.edges.keys(),
+        }
     }
 
-    #[inline]
-    pub(crate) fn edges_values_iter(&self) -> NodeEdgesValueIter<'_, K, V> {
-        self.edges.values()
+    pub(crate) fn node_view_mut(&mut self) -> NodeViewMut<'_, K, V> {
+        NodeViewMut {
+            label: self.label.as_deref(),
+            value: self.value.as_deref_mut(),
+            edges: self.edges.values_mut(),
+        }
     }
 
-    #[inline]
-    #[allow(dead_code)]
-    pub(crate) fn edges_values_iter_mut(&mut self) -> NodeEdgesValueIterMut<'_, K, V> {
-        self.edges.values_mut()
+    pub(crate) fn node_view_owned(mut self) -> NodeViewOwned<K, V> {
+        NodeViewOwned {
+            value: self.value.take().map(|b| *b),
+            edges: self.edges.into_values(),
+        }
     }
 
+    /*-----------------------------------------------------------------------------*/
 
     #[allow(clippy::borrowed_box)]
     #[inline]
