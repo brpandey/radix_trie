@@ -1,14 +1,16 @@
+pub mod view;
+
 use std::mem;
 use std::ops::Deref;
 use std::fmt;
 use std::borrow::Cow;
 use std::marker::PhantomData;
-use std::collections::{HashMap, hash_map::{Keys, Values, ValuesMut, IntoValues}};
+use std::collections::HashMap;
 
 use crate::delete::{Playback, Cursor, capture};
 use crate::iter::{LabelsIter, ValuesIter, ValuesIterMut, IntoIter, LeafPairsIter, LeafPairsIterMut};
 use crate::traverse::{TraverseType, TraverseResult, KeyMatch, SuffixType, traverse_match, traverse};
-
+use crate::node::view::{NodeView, NodeViewMut, NodeViewOwned};
 
 // A key is not actually stored in the Trie but instead a Vec<u8>
 // The trie is accessed via anything the implements the trait AsRef<[u8]>
@@ -23,32 +25,6 @@ pub struct Node<K, V> {
     edges: HashMap<u8, Box<Node<K, V>>>,
     key: PhantomData<fn() -> K>,  // from Empty Iterator
 }
-
-/*-----------------------------------------------------------------------------*/
-// Auxiliary data structures that provide views into Node mainly used by Iter,
-// generated when necessary
-
-pub struct NodeView<'a, K, V> {
-    pub(crate) label: Option<&'a [u8]>,
-    pub(crate) value: Option<&'a V>,
-    pub(crate) edges: Values<'a, u8, Box<Node<K, V>>>,
-    pub(crate) keys: Keys<'a, u8, Box<Node<K, V>>>,
-}
-
-// Borrow checker is smart enough to know that different struct fields can be re-borrowed (as mutable)
-// In that mutable access (a write) to one won't affect another
-pub struct NodeViewMut<'a, K, V> {
-    pub(crate) label: Option<&'a [u8]>, // not allowed to modify label - just a shared ref
-    pub(crate) value: Option<&'a mut V>,
-    pub(crate) edges: ValuesMut<'a, u8, Box<Node<K, V>>>,
-}
-
-pub struct NodeViewOwned<K, V> {
-    pub(crate) value: Option<V>,
-    pub(crate) edges: IntoValues<u8, Box<Node<K, V>>>
-}
-
-/*-----------------------------------------------------------------------------*/
 
 impl<K, V> Default for Node<K, V> {
     fn default() -> Self {
@@ -125,35 +101,6 @@ impl<K, V> Node<K, V> {
         }
     }
 
-    /*-----------------------------------------------------------------------------*/
-    // Instead of using multiple getter and setters we have use view structs
-    // to assist when we need to read or modify node iter related functionality
-    pub(crate) fn node_view(&self) -> NodeView<'_, K, V> {
-        NodeView {
-            label: self.label.as_deref(),
-            value: self.value.as_deref(),
-            edges: self.edges.values(),
-            keys: self.edges.keys(),
-        }
-    }
-
-    pub(crate) fn node_view_mut(&mut self) -> NodeViewMut<'_, K, V> {
-        NodeViewMut {
-            label: self.label.as_deref(),
-            value: self.value.as_deref_mut(),
-            edges: self.edges.values_mut(),
-        }
-    }
-
-    pub(crate) fn node_view_owned(mut self) -> NodeViewOwned<K, V> {
-        NodeViewOwned {
-            value: self.value.take().map(|b| *b),
-            edges: self.edges.into_values(),
-        }
-    }
-
-    /*-----------------------------------------------------------------------------*/
-
     #[allow(clippy::borrowed_box)]
     #[inline]
     pub(crate) fn lookup_edge(&self, first: u8) -> Option<&Box<Node<K, V>>> {
@@ -186,12 +133,10 @@ impl<K, V> Node<K, V> {
 
         let mut bridge_node = Box::new(Node::new(Some(common.into_owned()), NodeType::Inner, None));
         let mut old_node = self.edges.remove(&byte_key).unwrap();
-
         let next_byte_key = suffix_edge[0];
 
         // replace previous key with the edge suffix value (as the common prefix goes in the bridge node)
         old_node.label.replace(suffix_edge.into_owned());
-
         bridge_node.edges.insert(next_byte_key, old_node);
 
         self.edges.insert(byte_key, bridge_node);
@@ -258,6 +203,7 @@ impl<K, V> Node<K, V> {
                     // Match not found hence create new node and write new label
                     let key = input_label[0];
                     let label = Some(input_label.into_owned());
+
                     current.edges.insert(key, Box::new(Node::new(label, NodeType::Key, None)));
                     current = &mut **current.edges.get_mut(&key).unwrap();
                     break
@@ -374,24 +320,23 @@ impl<K, V> Node<K, V> {
 
          */
 
-        // y
-        let mut passthrough = current.edges.remove(&edge_key).unwrap();
-
-        // merge key is key to y'
-        // remove y' from y
-        let mut merged = passthrough.edges.remove(&merge_key).unwrap();
+        let mut passthrough = current.edges.remove(&edge_key).unwrap(); // y
+        let mut merged = passthrough.edges.remove(&merge_key).unwrap(); // remove y' from y
         let mut la = passthrough.label.take().unwrap();
+
+        // Put in place new label that combines both labels la and lb
         let lb = &mut merged.label.take().unwrap();
         la.append(lb);
-
         merged.label.replace(la);
 
-        // Here we perform the actual compression by inserting y' into y's old spot
+        // Here we perform the actual "compression" effect by inserting y' into y's old spot
         current.edges.insert(edge_key, merged);
 
         passthrough
     }
 }
+
+// Node functionality related to Iter
 
 impl<K, V> Node<K, V> {
     pub(crate) fn iter(&self, size: usize) -> LeafPairsIter<'_, K, V> {
@@ -412,6 +357,35 @@ impl<K, V> Node<K, V> {
 
     pub(crate) fn values_mut(&mut self, size: usize) -> ValuesIterMut<'_, K, V> {
         ValuesIterMut::new(self, size)
+    }
+
+    /*-----------------------------------------------------------------------------*/
+    // View structs are used to get around multiple mutable reborrow concerns
+    // when mostly used with iter when a node is being mutably borrowed,
+    // and also to eliminate getter methods clutter
+
+    pub(crate) fn node_view(&self) -> NodeView<'_, K, V> {
+        NodeView::new(
+            self.label.as_deref(),
+            self.value.as_deref(),
+            self.edges.values(),
+            self.edges.keys(),
+        )
+    }
+
+    pub(crate) fn node_view_mut(&mut self) -> NodeViewMut<'_, K, V> {
+        NodeViewMut::new(
+            self.label.as_deref(),
+            self.value.as_deref_mut(),
+            self.edges.values_mut(),
+        )
+    }
+
+    pub(crate) fn node_view_owned(mut self) -> NodeViewOwned<K, V> {
+        NodeViewOwned::new(
+            self.value.take().map(|b| *b),
+            self.edges.into_values(),
+        )
     }
 }
 
