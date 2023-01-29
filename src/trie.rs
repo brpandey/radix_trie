@@ -3,7 +3,14 @@ use std::borrow::Cow;
 
 use crate::node::Node;
 use crate::query::{longest_prefix, all_keys};
-use crate::iter::{LabelsIter, ValuesIter, ValuesIterMut, IntoIter, LeafPairsIter, LeafPairsIterMut};
+//use crate::iter::{ValuesIter, ValuesIterMut, IntoIter, LeafPairsIter, LeafPairsIterMut};
+
+pub type LabelsIter<'a, K, V> = crate::iter::LabelsIter<'a, K, V>;
+pub type ValuesIter<'a, K, V> = crate::iter::ValuesIter<'a, K, V>;
+pub type ValuesIterMut<'a, K, V> = crate::iter::ValuesIterMut<'a, K, V>;
+pub type LeafPairsIter<'a, K, V> = crate::iter::LeafPairsIter<'a, K, V>;
+pub type LeafPairsIterMut<'a, K, V> = crate::iter::LeafPairsIterMut<'a, K, V>;
+pub type IntoIter<K, V> = crate::iter::IntoIter<K, V>;
 
 #[derive(Debug)]
 pub struct Trie<K, V> {
@@ -317,7 +324,7 @@ mod tests {
 
 
     #[test]
-    fn check_compessed_labels() {
+    fn check_compressed_labels() {
         let mut trie: Trie<_, _> = [("anthem", 1), ("anti", 2), ("anthemion", 7), ("and", 77)].iter().cloned().collect();
 
         let keys = trie.all_keys("an");
