@@ -47,10 +47,12 @@ fn main() {
     assert_eq!(set, BTreeSet::from(["andala", "ave eraser", "bile", "epad", "exican sombrero", "eypot",
                                     "itor", "m", "n", "o", "s", "scle cars", "thguard", "u", "y brown hair dye"]));
 
-    let ks = search_terms.all_keys("me");
-    assert_eq!(vec!["mexican sombrero"], flatten_keys(ks.as_ref()));
+    let mut keys = search_terms.all_keys("me");
+    assert_eq!(vec!["mexican sombrero"], flatten_keys(keys.as_ref()));
 
-    let mut keys;
+    keys = search_terms.all_keys("mu");
+    assert_eq!(vec!["muave eraser", "muscle cars"], flatten_keys(keys.as_ref()));
+
     let searched_word = "mouse".bytes();
     let mut user_typed = vec![];
 
