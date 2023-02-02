@@ -3,8 +3,31 @@ Radix Trie
 
 A simple space-optimized trie written in Rust
 
+```mermaid
+flowchart TB
+    id1(m) --> id2 & id3 & id6 & id7
+    id2(andala)
+    id3(u) --> id4 & id5
+    id4(ave eraser)
+    id5(scle cars)
+    id6(exican sombrero)
+    id7(o)
+    id7 --> id8 & id9 & id10
+    id8(bile)
+    id9(n) --> id11 & id12
+    id10(u) --> id13 & id14
+    id11(eypot)
+    id12(itor)
+    id13(s) --> id15 & id16
+    id14(thguard)
+    id15(epad)
+    id16(y brown hair dye)
+```
+
+
 ```rust
-use radix_trie::trie::Trie;
+use radix_trie::trie::{Trie, LabelsIter};
+use std::collections::BTreeSet;
 
 fn main() {
     // Radix Trie Example
@@ -17,6 +40,15 @@ fn main() {
          ("mexican sombrero", 27), ("muscle cars", 11), ("mouthguard", 8),
          ("monitor", 7),("mousepad", 2361), ("muave eraser", 98)]
         .iter().cloned().collect();
+
+    let set = labels_helper(search_terms.labels());
+
+    // Check the label of the static tree (see picture diagram)
+    assert_eq!(set, BTreeSet::from(["andala", "ave eraser", "bile", "epad", "exican sombrero", "eypot",
+                                    "itor", "m", "n", "o", "s", "scle cars", "thguard", "u", "y brown hair dye"]));
+
+    let ks = search_terms.all_keys("me");
+    assert_eq!(vec!["mexican sombrero"], flatten_keys(ks.as_ref()));
 
     let mut keys;
     let searched_word = "mouse".bytes();
@@ -32,17 +64,18 @@ fn main() {
         keys = search_terms.all_keys(std::str::from_utf8(&user_typed).unwrap_or_default());
 
         let v: Vec<&str> = flatten_keys(keys.as_ref());
-        println!("Search results, for typed text: {:?} ---> {:?}\n",
+        println!("Search results, for typed text: {:?} ---> {:?}",
                  std::str::from_utf8(&user_typed).unwrap_or_default(),
                  &v);
 
         match i {
             0 => assert_eq!(v, vec!["mandala", "mexican sombrero", "mobile", "moneypot",
-                                    "monitor", "mousepad", "mousy brown hair dye", 
+                                    "monitor", "mousepad", "mousy brown hair dye",
                                     "mouthguard", "muave eraser", "muscle cars"]),
-            1 => assert_eq!(v, vec!["mobile", "moneypot", "monitor", "mousepad", 
-            "mousy brown hair dye", "mouthguard"]),
-            2 => assert_eq!(v, vec!["mousepad", "mousy brown hair dye", "mouthguard"]),
+            1 => assert_eq!(v, vec!["mobile", "moneypot", "monitor", "mousepad",
+                                    "mousy brown hair dye", "mouthguard"]),
+            2 => assert_eq!(v, vec!["mousepad", "mousy brown hair dye",
+                                    "mouthguard"]),
             3 => assert_eq!(v, vec!["mousepad", "mousy brown hair dye"]),
             4 => assert_eq!(v, vec!["mousepad"]),
             _ => (),
@@ -59,6 +92,11 @@ pub fn flatten_keys<'a>(keys: Option<&'a Vec<Vec<u8>>>) -> Vec<&'a str> {
         v
     })
 }
+
+fn labels_helper<'a, K: 'a, V: 'a>(labels: LabelsIter<'a, K, V>) -> BTreeSet<&'a str> {
+    labels.map(|bytes| std::str::from_utf8(bytes).unwrap()).collect::<BTreeSet<&str>>()
+}
+
 ```
 
 ```rust
@@ -96,6 +134,16 @@ Bibek
 PS (with love)
 
 Some tests ;)
+
+```mermaid
+flowchart LR;
+    id1(an) ---> id2 & id3
+    id2(t) --> id4 & id5
+    id3(d)
+    id4(hem) --> id6
+    id5(i)
+    id6(ion)
+```
 
 ```rust
 

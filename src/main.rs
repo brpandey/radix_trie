@@ -1,4 +1,5 @@
-use radix_trie::trie::Trie;
+use radix_trie::trie::{Trie, LabelsIter};
+use std::collections::BTreeSet;
 
 fn main() {
     // Radix Trie Example
@@ -11,6 +12,15 @@ fn main() {
          ("mexican sombrero", 27), ("muscle cars", 11), ("mouthguard", 8),
          ("monitor", 7),("mousepad", 2361), ("muave eraser", 98)]
         .iter().cloned().collect();
+
+    let set = labels_helper(search_terms.labels());
+
+    // Check the label of the static tree (see picture diagram)
+    assert_eq!(set, BTreeSet::from(["andala", "ave eraser", "bile", "epad", "exican sombrero", "eypot",
+                                    "itor", "m", "n", "o", "s", "scle cars", "thguard", "u", "y brown hair dye"]));
+
+    let ks = search_terms.all_keys("me");
+    assert_eq!(vec!["mexican sombrero"], flatten_keys(ks.as_ref()));
 
     let mut keys;
     let searched_word = "mouse".bytes();
@@ -55,6 +65,11 @@ pub fn flatten_keys<'a>(keys: Option<&'a Vec<Vec<u8>>>) -> Vec<&'a str> {
         v
     })
 }
+
+fn labels_helper<'a, K: 'a, V: 'a>(labels: LabelsIter<'a, K, V>) -> BTreeSet<&'a str> {
+    labels.map(|bytes| std::str::from_utf8(bytes).unwrap()).collect::<BTreeSet<&str>>()
+}
+
 
 
 /*
