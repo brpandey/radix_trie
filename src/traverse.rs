@@ -36,8 +36,8 @@ pub(crate) struct TraverseItem<'a, K: 'a, V: 'a>{
     pub(crate) level: u32,
 }
 
-
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) enum TraverseResult<'a, K: 'a, V: 'a> {
     Stack(Vec<TraverseItem<'a, K, V>>),
     PartialTerminal(bool, &'a Node<K, V>, &'a [u8]), // If match prefix matches some of the terminal's label
