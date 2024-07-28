@@ -229,43 +229,33 @@ impl<K, V> BaseIterOwned<K, V> {
 }
 
 
+// Macro to implement Default trait for given type using inner type
+macro_rules! derive_default {
+    ($type:ident, $inner:ident) => {
+
+        impl<'a, K: 'a, V: 'a> Default for $type<'a, K, V> {
+            fn default() -> Self {
+                $type($inner::default())
+            }
+        }
+    };
+}
+
 /*-----------------------------------------------------------------------*/
 // Default trait implementations for custom iter types
-impl<'a, K: 'a, V: 'a> Default for LabelsIter<'a, K, V> {
-    fn default() -> Self {
-        LabelsIter(BaseIter::default())
-    }
-}
 
-impl<'a, K: 'a, V: 'a> Default for ValuesIter<'a, K, V> {
-    fn default() -> Self {
-        ValuesIter(BaseIter::default())
-    }
-}
-
-impl<'a, K: 'a, V: 'a> Default for ValuesIterMut<'a, K, V> {
-    fn default() -> Self {
-        ValuesIterMut(BaseIterMut::default())
-    }
-}
-
-impl<'a, K: 'a, V: 'a> Default for LeafPairsIter<'a, K, V> {
-    fn default() -> Self {
-        LeafPairsIter(BaseIter::default())
-    }
-}
-
-impl<'a, K: 'a, V: 'a> Default for LeafPairsIterMut<'a, K, V> {
-    fn default() -> Self {
-        LeafPairsIterMut(BaseIterMut::default())
-    }
-}
+derive_default!(LabelsIter, BaseIter);
+derive_default!(ValuesIter, BaseIter);
+derive_default!(ValuesIterMut, BaseIterMut);
+derive_default!(LeafPairsIter, BaseIter);
+derive_default!(LeafPairsIterMut, BaseIterMut);
 
 impl<K, V> Default for IntoIter<K, V> {
     fn default() -> Self {
         IntoIter(BaseIterOwned::default())
     }
 }
+
 
 /*-----------------------------------------------------------------------*/
 // Implementations for custom iterator types which leverage base iterator
