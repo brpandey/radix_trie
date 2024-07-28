@@ -232,7 +232,6 @@ impl<K, V> BaseIterOwned<K, V> {
 // Macro to implement Default trait for given type using inner type
 macro_rules! derive_default {
     ($type:ident, $inner:ident) => {
-
         impl<'a, K: 'a, V: 'a> Default for $type<'a, K, V> {
             fn default() -> Self {
                 $type($inner::default())
@@ -241,51 +240,40 @@ macro_rules! derive_default {
     };
 }
 
-/*-----------------------------------------------------------------------*/
-// Default trait implementations for custom iter types
+// impl type with new associated method along with derive default impl
+macro_rules! derive_default_new {
+    ($type:ident, $inner:ident) => {
 
-derive_default!(LabelsIter, BaseIter);
-derive_default!(ValuesIter, BaseIter);
-derive_default!(ValuesIterMut, BaseIterMut);
-derive_default!(LeafPairsIter, BaseIter);
-derive_default!(LeafPairsIterMut, BaseIterMut);
+        derive_default!($type, $inner);
+        impl<'a, K: 'a, V: 'a> $type<'a, K, V> { // new takes a ref
+            pub fn new(node: &'a Node<K, V>, size: usize) -> $type<'a, K, V> {
+                $type($inner::new(node, size))
+            }
+        }
+    };
+    ($type:ident, $inner:ident, $mut:expr) => {
+
+        derive_default!($type, $inner);
+        impl<'a, K: 'a, V: 'a> $type<'a, K, V> { // new takes a mutable ref
+            pub fn new(node: &'a mut Node<K, V>, size: usize) -> $type<'a, K, V> {
+                $type($inner::new(node, size))
+            }
+        }
+    };
+}
+
+/*-----------------------------------------------------------------------*/
+// Trait implementations (Default, IntoIter) and associated new func for custom iter types using base iterator
+
+derive_default_new!(LabelsIter, BaseIter);
+derive_default_new!(ValuesIter, BaseIter);
+derive_default_new!(ValuesIterMut, BaseIterMut, true);
+derive_default_new!(LeafPairsIter, BaseIter);
+derive_default_new!(LeafPairsIterMut, BaseIterMut, true);
 
 impl<K, V> Default for IntoIter<K, V> {
     fn default() -> Self {
         IntoIter(BaseIterOwned::default())
-    }
-}
-
-
-/*-----------------------------------------------------------------------*/
-// Implementations for custom iterator types which leverage base iterator
-impl<'a, K: 'a, V: 'a> LabelsIter<'a, K, V> {
-    pub fn new(node: &'a Node<K, V>, size: usize) -> LabelsIter<'a, K, V> {
-        LabelsIter(BaseIter::new(node, size))
-    }
-}
-
-impl<'a, K: 'a, V: 'a> ValuesIter<'a, K, V> {
-    pub fn new(node: &'a Node<K, V>, size: usize) -> ValuesIter<'a, K, V> {
-        ValuesIter(BaseIter::new(node, size))
-    }
-}
-
-impl<'a, K: 'a, V: 'a> ValuesIterMut<'a, K, V> {
-    pub fn new(node: &'a mut Node<K, V>, size: usize) -> ValuesIterMut<'a, K, V> {
-        ValuesIterMut(BaseIterMut::new(node, size))
-    }
-}
-
-impl<'a, K: 'a, V: 'a> LeafPairsIter<'a, K, V> {
-    pub fn new(node: &'a Node<K, V>, size: usize) -> LeafPairsIter<'a, K, V> {
-        LeafPairsIter(BaseIter::new(node, size))
-    }
-}
-
-impl<'a, K: 'a, V: 'a> LeafPairsIterMut<'a, K, V> {
-    pub fn new(node: &'a mut Node<K, V>, size: usize) -> LeafPairsIterMut<'a, K, V> {
-        LeafPairsIterMut(BaseIterMut::new(node, size))
     }
 }
 
